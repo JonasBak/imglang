@@ -11,24 +11,17 @@ fn main() {
     if args.len() > 2 {
         println!("usage imglang [script]");
     } else if args.len() == 2 {
-        let lexer = Lexer::new_from_file(&args[1]).unwrap();
-        println!("{:?}", lexer);
-        let tokens = lexer.parse().unwrap();
+        let tokens = parse_file(&args[1]).unwrap();
         println!("{:?}", tokens);
-        let parser = Parser::new(tokens);
-        parser.parse().unwrap();
+        parse_tokens(tokens).unwrap();
     } else {
         print!("REPL\n> ");
         io::stdout().flush().unwrap();
         let stdin = io::stdin();
         for line in stdin.lock().lines() {
-            let lexer = Lexer::new(line.unwrap());
-            println!("{:?}", lexer);
-            let tokens = lexer.parse().unwrap();
+            let tokens = parse_string(line.unwrap()).unwrap();
             println!("{:?}", tokens);
-            let parser = Parser::new(tokens);
-            parser.parse().unwrap();
-
+            parse_tokens(tokens).unwrap();
             print!("> ");
             io::stdout().flush().unwrap();
         }

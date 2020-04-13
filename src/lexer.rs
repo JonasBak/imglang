@@ -1,10 +1,5 @@
 use std::fs;
 
-#[derive(Debug)]
-pub struct Lexer {
-    string: String,
-}
-
 pub type LexerResult<T> = Result<T, LexerError>;
 #[derive(Debug)]
 pub enum LexerError {
@@ -13,7 +8,7 @@ pub enum LexerError {
     File,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     // Characters
     LeftPar,
@@ -64,101 +59,136 @@ pub enum TokenType {
     Eof,
 }
 
-impl Lexer {
-    pub fn new(string: String) -> Lexer {
-        Lexer { string }
-    }
-    pub fn new_from_file(filename: &str) -> LexerResult<Lexer> {
-        let string = fs::read_to_string(filename).or(Err(LexerError::File))?;
-        Ok(Lexer::new(string))
-    }
-    pub fn parse(&self) -> LexerResult<Vec<TokenType>> {
-        let mut tokens = vec![];
-        let mut chars = self.string.chars().enumerate().peekable();
-        loop {
-            let (i, c) = match chars.next() {
-                Some(a) => a,
-                None => {
-                    break;
-                }
-            };
-            let token = match c {
-                '(' => TokenType::LeftPar,
-                ')' => TokenType::RightPar,
-                '[' => TokenType::LeftBrace,
-                ']' => TokenType::RightBrace,
-                ',' => TokenType::Comma,
-                '.' => TokenType::Dot,
-                '-' => TokenType::Minus,
-                '+' => TokenType::Plus,
-                ';' => TokenType::Semicolon,
-                '*' => TokenType::Star,
-                '/' => {
-                    if chars.peek().map(|(_, cl)| cl == &'/').unwrap_or(false) {
-                        loop {
-                            if chars.next().map(|(_, cmt)| cmt == '\n').unwrap_or(true) {
-                                break;
-                            }
-                        }
-                        continue;
-                    } else {
-                        TokenType::Slash
-                    }
-                }
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
+    pub start: usize,
+    pub end: usize,
+    pub t: TokenType,
+}
 
-                '!' => {
-                    if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
-                        chars.next();
-                        TokenType::BangEqual
-                    } else {
-                        TokenType::Bang
-                    }
-                }
-                '=' => {
-                    if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
-                        chars.next();
-                        TokenType::EqualEqual
-                    } else {
-                        TokenType::Equal
-                    }
-                }
-                '>' => {
-                    if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
-                        chars.next();
-                        TokenType::GreaterEqual
-                    } else {
-                        TokenType::Greater
-                    }
-                }
-                '<' => {
-                    if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
-                        chars.next();
-                        TokenType::LessEqual
-                    } else {
-                        TokenType::Less
-                    }
-                }
+pub fn parse_file(filename: &str) -> LexerResult<Vec<Token>> {
+    let string = fs::read_to_string(filename).or(Err(LexerError::File))?;
+    Ok(parse_string(string)?)
+}
 
-                ' ' | '\t' | '\r' | '\n' => {
-                    continue;
-                }
-
-                '"' => {
-                    let mut literal = vec![];
+pub fn parse_string(string: String) -> LexerResult<Vec<Token>> {
+    let mut tokens = vec![];
+    let mut chars = string.chars().enumerate().peekable();
+    loop {
+        let (i, c) = match chars.next() {
+            Some(a) => a,
+            None => {
+                break;
+            }
+        };
+        let (start, end, t) = match c {
+            '(' => (i, i + 1, TokenType::LeftPar),
+            ')' => (i, i + 1, TokenType::RightPar),
+            '[' => (i, i + 1, TokenType::LeftBrace),
+            ']' => (i, i + 1, TokenType::RightBrace),
+            ',' => (i, i + 1, TokenType::Comma),
+            '.' => (i, i + 1, TokenType::Dot),
+            '-' => (i, i + 1, TokenType::Minus),
+            '+' => (i, i + 1, TokenType::Plus),
+            ';' => (i, i + 1, TokenType::Semicolon),
+            '*' => (i, i + 1, TokenType::Star),
+            '/' => {
+                if chars.peek().map(|(_, cl)| cl == &'/').unwrap_or(false) {
                     loop {
-                        let (_, l) = chars.next().ok_or(LexerError::Unescaped(i))?;
-                        if l == '"' {
+                        if chars.next().map(|(_, cmt)| cmt == '\n').unwrap_or(true) {
                             break;
                         }
-                        literal.push(l);
                     }
-                    TokenType::String(literal.into_iter().collect())
+                    continue;
+                } else {
+                    (i, i + 1, TokenType::Slash)
                 }
-                '0'..='9' => {
+            }
+
+            '!' => {
+                if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
+                    chars.next();
+                    (i, i + 2, TokenType::BangEqual)
+                } else {
+                    (i, i + 1, TokenType::Bang)
+                }
+            }
+            '=' => {
+                if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
+                    chars.next();
+                    (i, i + 2, TokenType::EqualEqual)
+                } else {
+                    (i, i + 1, TokenType::Equal)
+                }
+            }
+            '>' => {
+                if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
+                    chars.next();
+                    (i, i + 2, TokenType::GreaterEqual)
+                } else {
+                    (i, i + 1, TokenType::Greater)
+                }
+            }
+            '<' => {
+                if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
+                    chars.next();
+                    (i, i + 2, TokenType::LessEqual)
+                } else {
+                    (i, i + 1, TokenType::Less)
+                }
+            }
+
+            ' ' | '\t' | '\r' | '\n' => {
+                continue;
+            }
+
+            '"' => {
+                let mut literal = vec![];
+                loop {
+                    let (_, l) = chars.next().ok_or(LexerError::Unescaped(i))?;
+                    if l == '"' {
+                        break;
+                    }
+                    literal.push(l);
+                }
+                (
+                    i,
+                    i + literal.len() + 2,
+                    TokenType::String(literal.into_iter().collect()),
+                )
+            }
+            '0'..='9' => {
+                let mut literal = vec![c];
+                loop {
+                    if let Some((_, l)) = chars.peek() {
+                        if !l.is_numeric() && l != &'.' {
+                            break;
+                        }
+                        let (_, l) = chars.next().unwrap();
+                        literal.push(l);
+                    } else {
+                        break;
+                    }
+                }
+                (
+                    i,
+                    i + literal.len(),
+                    TokenType::Number(
+                        literal
+                            .into_iter()
+                            .collect::<String>()
+                            .parse()
+                            .or(Err(LexerError::Parse(i)))?,
+                    ),
+                )
+            }
+
+            _ => {
+                if c.is_alphanumeric() {
                     let mut literal = vec![c];
                     loop {
                         if let Some((_, l)) = chars.peek() {
-                            if !l.is_numeric() && l != &'.' {
+                            if !l.is_alphanumeric() {
                                 break;
                             }
                             let (_, l) = chars.next().unwrap();
@@ -167,40 +197,22 @@ impl Lexer {
                             break;
                         }
                     }
-                    TokenType::Number(
-                        literal
-                            .into_iter()
-                            .collect::<String>()
-                            .parse()
-                            .or(Err(LexerError::Parse(i)))?,
+                    (
+                        i,
+                        i + literal.len(),
+                        TokenType::Identifier(literal.into_iter().collect::<String>()),
                     )
+                } else {
+                    return Err(LexerError::Parse(i));
                 }
-
-                _ => {
-                    if c.is_alphanumeric() {
-                        let mut literal = vec![c];
-                        loop {
-                            if let Some((_, l)) = chars.peek() {
-                                if !l.is_alphanumeric() {
-                                    break;
-                                }
-                                let (_, l) = chars.next().unwrap();
-                                literal.push(l);
-                            } else {
-                                break;
-                            }
-                        }
-                        TokenType::Identifier(literal.into_iter().collect::<String>())
-                    } else {
-                        return Err(LexerError::Parse(i));
-                    }
-                }
-            };
-            tokens.push(token);
-        }
-        tokens = tokens
-            .into_iter()
-            .map(|t| match t {
+            }
+        };
+        tokens.push(Token { start, end, t });
+    }
+    tokens = tokens
+        .into_iter()
+        .map(|mut t| {
+            t.t = match t.t {
                 TokenType::Identifier(val) => match val.as_str() {
                     "and" => TokenType::And,
                     "class" => TokenType::Class,
@@ -220,11 +232,34 @@ impl Lexer {
                     "while" => TokenType::While,
                     _ => TokenType::Identifier(val),
                 },
-                _ => t,
-            })
-            .collect();
+                _ => t.t,
+            };
+            t
+        })
+        .collect();
 
-        tokens.push(TokenType::Eof);
-        return Ok(tokens);
+    tokens.push(Token {
+        start: string.len(),
+        end: string.len(),
+        t: TokenType::Eof,
+    });
+    return Ok(tokens);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_string() {
+        let mut tokens = parse_string("".to_string()).unwrap();
+        assert_eq!(
+            tokens.pop(),
+            Some(Token {
+                start: 0,
+                end: 0,
+                t: TokenType::Eof
+            })
+        );
     }
 }
