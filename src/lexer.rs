@@ -1,11 +1,8 @@
-use std::fs;
-
 pub type LexerResult<T> = Result<T, LexerError>;
 #[derive(Debug, PartialEq)]
 pub enum LexerError {
     Parse(usize),
     Unescaped(usize),
-    File,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,12 +63,7 @@ pub struct Token {
     pub t: TokenType,
 }
 
-pub fn parse_file(filename: &str) -> LexerResult<Vec<Token>> {
-    let string = fs::read_to_string(filename).or(Err(LexerError::File))?;
-    Ok(parse_string(string)?)
-}
-
-pub fn parse_string(string: String) -> LexerResult<Vec<Token>> {
+pub fn parse_string(string: &String) -> LexerResult<Vec<Token>> {
     let mut tokens = vec![];
     let mut chars = string.chars().enumerate().peekable();
     loop {
