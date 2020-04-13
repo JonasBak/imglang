@@ -6,7 +6,6 @@ pub struct Lexer {
 }
 
 pub type LexerResult<T> = Result<T, LexerError>;
-
 #[derive(Debug)]
 pub enum LexerError {
     Parse(usize),
@@ -73,7 +72,7 @@ impl Lexer {
         let string = fs::read_to_string(filename).or(Err(LexerError::File))?;
         Ok(Lexer::new(string))
     }
-    pub fn parse(self) -> LexerResult<Vec<TokenType>> {
+    pub fn parse(&self) -> LexerResult<Vec<TokenType>> {
         let mut tokens = vec![];
         let mut chars = self.string.chars().enumerate().peekable();
         loop {
