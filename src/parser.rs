@@ -130,8 +130,8 @@ fn parse_comparison(tokens: &mut dyn TokenIterator) -> ParserResult<()> {
         .map(|t| match t {
             TokenType::Greater
             | TokenType::GreaterEqual
-            | TokenType::Less
-            | TokenType::LessEqual => true,
+            | TokenType::Lesser
+            | TokenType::LesserEqual => true,
             _ => false,
         })
         .unwrap_or(false)

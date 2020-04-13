@@ -1,7 +1,7 @@
 use std::fs;
 
 pub type LexerResult<T> = Result<T, LexerError>;
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LexerError {
     Parse(usize),
     Unescaped(usize),
@@ -30,8 +30,8 @@ pub enum TokenType {
     EqualEqual,
     Greater,
     GreaterEqual,
-    Less,
-    LessEqual,
+    Lesser,
+    LesserEqual,
 
     // Literals
     Identifier(String),
@@ -132,9 +132,9 @@ pub fn parse_string(string: String) -> LexerResult<Vec<Token>> {
             '<' => {
                 if chars.peek().map(|(_, cl)| cl == &'=').unwrap_or(false) {
                     chars.next();
-                    (i, i + 2, TokenType::LessEqual)
+                    (i, i + 2, TokenType::LesserEqual)
                 } else {
-                    (i, i + 1, TokenType::Less)
+                    (i, i + 1, TokenType::Lesser)
                 }
             }
 
@@ -244,22 +244,4 @@ pub fn parse_string(string: String) -> LexerResult<Vec<Token>> {
         t: TokenType::Eof,
     });
     return Ok(tokens);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_string() {
-        let mut tokens = parse_string("".to_string()).unwrap();
-        assert_eq!(
-            tokens.pop(),
-            Some(Token {
-                start: 0,
-                end: 0,
-                t: TokenType::Eof
-            })
-        );
-    }
 }
