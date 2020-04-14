@@ -1,8 +1,10 @@
 mod debugger;
+mod interpreter;
 mod lexer;
 mod parser;
 
 use debugger::*;
+use interpreter::*;
 use lexer::*;
 use parser::*;
 use std::env;
@@ -31,6 +33,7 @@ fn main() {
             }
         };
         println!("{:?}", ast);
+        println!("{:?}", ast.eval());
     } else {
         println!("REPL");
         io::stdout().flush().unwrap();
@@ -58,6 +61,7 @@ fn main() {
                 }
             };
             println!("{:?}", ast);
+            println!("{:?}", ast.eval());
         }
     }
 }

@@ -62,7 +62,7 @@ pub enum Ast {
     LE(Box<Ast>, Box<Ast>),
 
     Eq(Box<Ast>, Box<Ast>),
-    Not(Box<Ast>, Box<Ast>),
+    NotEq(Box<Ast>, Box<Ast>),
 }
 
 fn parse_primary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
@@ -196,7 +196,7 @@ fn parse_equality(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     {
         eq = match tokens.next().unwrap().t {
             TokenType::EqualEqual => Box::new(Ast::Eq(eq, parse_comparison(tokens)?)),
-            TokenType::BangEqual => Box::new(Ast::Not(eq, parse_comparison(tokens)?)),
+            TokenType::BangEqual => Box::new(Ast::NotEq(eq, parse_comparison(tokens)?)),
             _ => panic!(),
         }
     }
