@@ -7,6 +7,8 @@ pub fn print_parser_err(source: &String, error: ParserError) {
         source.insert_str(token.start, ">>>");
         println!("{}", source);
         println!("Error: Unexpected token {:?}", token.t);
+    } else {
+        println!("Error: {:?}", error);
     }
 }
 

@@ -24,11 +24,16 @@ pub type ParserResult<T> = Result<T, ParserError>;
 pub enum ParserError {
     UnexpectedToken(Token),
     ExpectedToken,
+    ExpectedEof,
 }
 
 pub fn parse_tokens(tokens: Vec<Token>) -> ParserResult<Box<Ast>> {
     let mut tokens = tokens.iter().peekable();
-    parse_expression(&mut tokens)
+    let exp = parse_expression(&mut tokens)?;
+    if tokens.next().map(|t| t.t != TokenType::Eof).unwrap_or(true) {
+        return Err(ParserError::ExpectedEof);
+    }
+    Ok(exp)
 }
 
 #[derive(Debug)]
@@ -39,7 +44,6 @@ pub enum Ast {
     False,
     True,
     Nil,
-    GroupedExpr(Box<Ast>),
 
     // unary
     Bang(Box<Ast>),
@@ -85,11 +89,11 @@ fn parse_primary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
         }
         TokenType::LeftPar => {
             tokens.next();
-            let node = Ast::GroupedExpr(parse_expression(tokens)?);
+            let node = parse_expression(tokens)?;
             match tokens.peek_t() {
                 Some(TokenType::RightPar) => {
                     tokens.next();
-                    Ok(Box::new(node))
+                    Ok(node)
                 }
                 _ => Err(ParserError::UnexpectedToken(tokens.next().unwrap().clone())),
             }
