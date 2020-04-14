@@ -58,6 +58,7 @@ pub enum Ast {
     // Misc
     Program(Vec<Box<Ast>>),
     Decl(String, Box<Ast>),
+    Print(Box<Ast>),
 
     // primary
     Number(f64),
@@ -232,6 +233,15 @@ fn parse_expression(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
 
 fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     match tokens.peek_t() {
+        Some(TokenType::Print) => {
+            tokens.next();
+            let print = parse_expression(tokens)?;
+            if !tokens.check(&|t| t == &TokenType::Semicolon) {
+                return Err(tokens.unexpected());
+            }
+            tokens.next();
+            Ok(Box::new(Ast::Print(print)))
+        }
         _ => {
             let stmt = parse_expression(tokens)?;
             if !tokens.check(&|t| t == &TokenType::Semicolon) {

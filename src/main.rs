@@ -4,6 +4,7 @@ mod lexer;
 mod parser;
 
 use debugger::*;
+use interpreter::*;
 use lexer::*;
 use parser::*;
 use std::env;
@@ -12,6 +13,7 @@ use std::io::{self, BufRead, Write};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    let mut env = Scope::new();
     if args.len() > 2 {
         println!("usage imglang [script]");
     } else if args.len() == 2 {
@@ -32,7 +34,7 @@ fn main() {
             }
         };
         println!("{:?}", ast);
-        println!("{:?}", ast.eval());
+        println!("{:?}", env.eval(*ast));
     } else {
         println!("REPL");
         io::stdout().flush().unwrap();
@@ -60,7 +62,7 @@ fn main() {
                 }
             };
             println!("{:?}", ast);
-            println!("{:?}", ast.eval());
+            println!("{:?}", env.eval(*ast));
         }
     }
 }
