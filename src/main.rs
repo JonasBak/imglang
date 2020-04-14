@@ -4,7 +4,6 @@ mod lexer;
 mod parser;
 
 use debugger::*;
-use interpreter::*;
 use lexer::*;
 use parser::*;
 use std::env;
@@ -25,7 +24,7 @@ fn main() {
             }
         };
         println!("{:?}", tokens);
-        let ast = match parse_tokens(tokens) {
+        let ast = match parse_program(tokens) {
             Ok(ast) => ast,
             Err(error) => {
                 print_parser_err(&source, error);
@@ -53,7 +52,7 @@ fn main() {
                 }
             };
             println!("{:?}", tokens);
-            let ast = match parse_tokens(tokens) {
+            let ast = match parse_program(tokens) {
                 Ok(ast) => ast,
                 Err(error) => {
                     print_parser_err(&source, error);

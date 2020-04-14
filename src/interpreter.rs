@@ -39,6 +39,12 @@ fn handle_binary_error(a: Value, b: Value) -> RuntimeError {
 impl Ast {
     pub fn eval(self) -> RuntimeResult<Value> {
         let val = match self {
+            Ast::Program(prog) => {
+                for stat in prog.into_iter() {
+                    println!("{:?}", stat.eval()?);
+                }
+                Value::Nil
+            }
             Ast::Number(n) => Value::Number(n),
             Ast::String(s) => Value::String(s),
             Ast::False => Value::Bool(false),

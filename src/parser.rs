@@ -6,8 +6,33 @@ trait TokenIterator<'a>: Iterator<Item = &'a Token> {
     fn peek_t(&mut self) -> Option<&'a TokenType> {
         self.peek().map(|t| &t.t)
     }
+    fn next_t(&mut self) -> Option<&'a TokenType> {
+        self.next().map(|t| &t.t)
+    }
     fn check(&mut self, ped: &dyn Fn(&TokenType) -> bool) -> bool {
         self.peek_t().map(|t| ped(t)).unwrap_or(false)
+    }
+    fn unexpected(&mut self) -> ParserError {
+        match self.next() {
+            Some(token) => ParserError::UnexpectedToken(token.clone()),
+            None => ParserError::TODO,
+        }
+    }
+}
+
+fn map_when<T>(
+    tokens: &mut dyn TokenIterator,
+    ped: &dyn Fn(&TokenType) -> Option<T>,
+) -> ParserResult<T>
+where
+    T: Clone,
+{
+    match tokens.peek_t().map(|t| ped(t)).flatten() {
+        Some(i) => {
+            tokens.next();
+            Ok(i.clone())
+        }
+        _ => return Err(tokens.unexpected()),
     }
 }
 
@@ -25,27 +50,22 @@ pub type ParserResult<T> = Result<T, ParserError>;
 #[derive(Debug)]
 pub enum ParserError {
     UnexpectedToken(Token),
-    ExpectedToken,
-    ExpectedEof,
-}
-
-pub fn parse_tokens(tokens: Vec<Token>) -> ParserResult<Box<Ast>> {
-    let mut tokens = tokens.iter().peekable();
-    let exp = parse_expression(&mut tokens)?;
-    if tokens.next().map(|t| t.t != TokenType::Eof).unwrap_or(true) {
-        return Err(ParserError::ExpectedEof);
-    }
-    Ok(exp)
+    TODO,
 }
 
 #[derive(Debug)]
 pub enum Ast {
+    // Misc
+    Program(Vec<Box<Ast>>),
+    Decl(String, Box<Ast>),
+
     // primary
     Number(f64),
     String(String),
     False,
     True,
     Nil,
+    Identifier(String),
 
     // unary
     Bang(Box<Ast>),
@@ -67,41 +87,54 @@ pub enum Ast {
     NotEq(Box<Ast>, Box<Ast>),
 }
 
+pub fn parse_program(tokens: Vec<Token>) -> ParserResult<Box<Ast>> {
+    let mut tokens = tokens.iter().peekable();
+    let mut prog = vec![];
+    while tokens.check(&|t| t != &TokenType::Eof) {
+        prog.push(parse_declaration(&mut tokens)?);
+    }
+    if !tokens.check(&|t| t == &TokenType::Eof) {
+        return Err(tokens.unexpected());
+    }
+    Ok(Box::new(Ast::Program(prog)))
+}
+
 fn parse_primary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    match tokens.peek_t().ok_or(ParserError::ExpectedToken)? {
-        TokenType::Number(n) => {
+    match tokens.peek_t() {
+        Some(TokenType::Number(n)) => {
             tokens.next();
             Ok(Box::new(Ast::Number(*n)))
         }
-        TokenType::String(string) => {
+        Some(TokenType::String(string)) => {
             tokens.next();
             Ok(Box::new(Ast::String(string.clone())))
         }
-        TokenType::False => {
+        Some(TokenType::False) => {
             tokens.next();
             Ok(Box::new(Ast::False))
         }
-        TokenType::True => {
+        Some(TokenType::True) => {
             tokens.next();
             Ok(Box::new(Ast::True))
         }
-        TokenType::Nil => {
+        Some(TokenType::Nil) => {
             tokens.next();
             Ok(Box::new(Ast::Nil))
         }
-        TokenType::LeftPar => {
+        Some(TokenType::Identifier(s)) => {
+            tokens.next();
+            Ok(Box::new(Ast::Identifier(s.clone())))
+        }
+        Some(TokenType::LeftPar) => {
             tokens.next();
             let node = parse_expression(tokens)?;
-            match tokens.peek_t() {
-                Some(TokenType::RightPar) => {
-                    tokens.next();
-                    Ok(node)
-                }
-                _ => Err(ParserError::UnexpectedToken(tokens.next().unwrap().clone())),
+            if !tokens.check(&|t| t == &TokenType::RightPar) {
+                return Err(tokens.unexpected());
             }
+            tokens.next();
+            Ok(node)
         }
-
-        _ => Err(ParserError::UnexpectedToken(tokens.next().unwrap().clone())),
+        _ => Err(tokens.unexpected()),
     }
 }
 
@@ -189,6 +222,46 @@ fn parse_equality(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     Ok(eq)
 }
 
-fn parse_expression(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
+fn parse_assignment(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     parse_equality(tokens)
+}
+
+fn parse_expression(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
+    parse_assignment(tokens)
+}
+
+fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
+    match tokens.peek_t() {
+        _ => {
+            let stmt = parse_expression(tokens)?;
+            if !tokens.check(&|t| t == &TokenType::Semicolon) {
+                return Err(tokens.unexpected());
+            }
+            tokens.next();
+            Ok(stmt)
+        }
+    }
+}
+
+fn parse_declaration(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
+    match tokens.peek_t() {
+        Some(TokenType::Var) => {
+            tokens.next();
+            let identifier = map_when(tokens, &|t| match t {
+                TokenType::Identifier(s) => Some(s.clone()),
+                _ => None,
+            })?;
+            if !tokens.check(&|t| t == &TokenType::Equal) {
+                return Err(tokens.unexpected());
+            }
+            tokens.next();
+            let expr = parse_expression(tokens)?;
+            if !tokens.check(&|t| t == &TokenType::Semicolon) {
+                return Err(tokens.unexpected());
+            }
+            tokens.next();
+            Ok(Box::new(Ast::Decl(identifier, expr)))
+        }
+        _ => parse_statement(tokens),
+    }
 }
