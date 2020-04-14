@@ -2,19 +2,19 @@ use imglang::*;
 
 #[test]
 fn unescaped_string_error() {
-    let res = parse_string("var noe = \"hehe".to_string());
+    let res = parse_string(&"var noe = \"hehe".to_string());
     assert_eq!(res.unwrap_err(), LexerError::Unescaped(10));
 }
 
 #[test]
 fn illegal_character_error() {
-    let res = parse_string("var noe @ =  \"hehe\"".to_string());
+    let res = parse_string(&"var noe @ =  \"hehe\"".to_string());
     assert_eq!(res.unwrap_err(), LexerError::Parse(8));
 }
 
 #[test]
 fn empty_string() {
-    let mut tokens = parse_string("".to_string()).unwrap().into_iter();
+    let mut tokens = parse_string(&"".to_string()).unwrap().into_iter();
     assert_eq!(
         tokens.next(),
         Some(Token {
@@ -28,7 +28,7 @@ fn empty_string() {
 
 #[test]
 fn whitespace_ignored() {
-    let mut tokens = parse_string("    \n\n  \r\t \t".to_string())
+    let mut tokens = parse_string(&"    \n\n  \r\t \t".to_string())
         .unwrap()
         .into_iter();
     assert_eq!(
@@ -44,7 +44,9 @@ fn whitespace_ignored() {
 
 #[test]
 fn signle_characters() {
-    let mut tokens = parse_string("()[],.-+;/*".to_string()).unwrap().into_iter();
+    let mut tokens = parse_string(&"()[],.-+;/*".to_string())
+        .unwrap()
+        .into_iter();
     let expected = vec![
         Some(Token {
             start: 0,
@@ -115,7 +117,7 @@ fn signle_characters() {
 
 #[test]
 fn prefix_characters() {
-    let mut tokens = parse_string("! != = == > >= < <=".to_string())
+    let mut tokens = parse_string(&"! != = == > >= < <=".to_string())
         .unwrap()
         .into_iter();
     let expected = vec![
@@ -173,7 +175,7 @@ fn prefix_characters() {
 
 #[test]
 fn comments_ignored_to_newline() {
-    let mut tokens = parse_string("// test\n. // test 123".to_string())
+    let mut tokens = parse_string(&"// test\n. // test 123".to_string())
         .unwrap()
         .into_iter();
     let expected = vec![
@@ -196,7 +198,7 @@ fn comments_ignored_to_newline() {
 
 #[test]
 fn literals() {
-    let mut tokens = parse_string("identifier \"string\" 123.456".to_string())
+    let mut tokens = parse_string(&"identifier \"string\" 123.456".to_string())
         .unwrap()
         .into_iter();
     let expected = vec![
@@ -230,7 +232,8 @@ fn literals() {
 #[test]
 fn keywords() {
     let mut tokens = parse_string(
-        "and class else false fun for if nil or print return super this true var while".to_string(),
+        &"and class else false fun for if nil or print return super this true var while"
+            .to_string(),
     )
     .unwrap()
     .into_iter();
@@ -329,7 +332,7 @@ fn keywords() {
 
 #[test]
 fn identifier_with_keyword_prefix() {
-    let mut tokens = parse_string("format variable iff".to_string())
+    let mut tokens = parse_string(&"format variable iff".to_string())
         .unwrap()
         .into_iter();
     let expected = vec![
