@@ -76,8 +76,8 @@ pub fn parse_string(string: &String) -> LexerResult<Vec<Token>> {
         let (start, end, t) = match c {
             '(' => (i, i + 1, TokenType::LeftPar),
             ')' => (i, i + 1, TokenType::RightPar),
-            '[' => (i, i + 1, TokenType::LeftBrace),
-            ']' => (i, i + 1, TokenType::RightBrace),
+            '{' => (i, i + 1, TokenType::LeftBrace),
+            '}' => (i, i + 1, TokenType::RightBrace),
             ',' => (i, i + 1, TokenType::Comma),
             '.' => (i, i + 1, TokenType::Dot),
             '-' => (i, i + 1, TokenType::Minus),

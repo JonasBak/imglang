@@ -38,15 +38,21 @@ fn handle_binary_error(a: Value, b: Value) -> RuntimeError {
     }
 }
 
-pub struct Scope {
-    parent: Option<Box<Scope>>,
+pub struct Scope<'a> {
+    parent: Option<&'a Scope<'a>>,
     map: HashMap<String, Value>,
 }
 
-impl Scope {
-    pub fn new() -> Scope {
+impl Scope<'_> {
+    pub fn new() -> Scope<'static> {
         Scope {
             parent: None,
+            map: HashMap::new(),
+        }
+    }
+    fn child(&mut self) -> Scope {
+        Scope {
+            parent: Some(self),
             map: HashMap::new(),
         }
     }
@@ -79,6 +85,13 @@ impl Scope {
             Ast::Print(expr) => {
                 let value = self.eval(*expr)?;
                 println!("< {:?}", value);
+                Value::Nil
+            }
+            Ast::Block(exprs) => {
+                let mut block_scope = self.child();
+                for stat in exprs.into_iter() {
+                    println!("{:?}", block_scope.eval(*stat)?);
+                }
                 Value::Nil
             }
             Ast::Number(n) => Value::Number(n),

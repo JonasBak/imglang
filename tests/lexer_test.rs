@@ -44,7 +44,7 @@ fn whitespace_ignored() {
 
 #[test]
 fn signle_characters() {
-    let mut tokens = parse_string(&"()[],.-+;/*".to_string())
+    let mut tokens = parse_string(&"(){},.-+;/*".to_string())
         .unwrap()
         .into_iter();
     let expected = vec![

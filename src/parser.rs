@@ -59,6 +59,7 @@ pub enum Ast {
     Program(Vec<Box<Ast>>),
     Decl(String, Box<Ast>),
     Print(Box<Ast>),
+    Block(Vec<Box<Ast>>),
 
     // primary
     Number(f64),
@@ -90,12 +91,10 @@ pub enum Ast {
 pub fn parse_program(tokens: Vec<Token>) -> ParserResult<Box<Ast>> {
     let mut tokens = tokens.iter().peekable();
     let mut prog = vec![];
-    while tokens.check(&|t| t != &TokenType::Eof) {
+    while !tokens.check(&|t| t == &TokenType::Eof) {
         prog.push(parse_declaration(&mut tokens)?);
     }
-    if !tokens.check(&|t| t == &TokenType::Eof) {
-        return Err(tokens.unexpected());
-    }
+    tokens.next();
     Ok(Box::new(Ast::Program(prog)))
 }
 
@@ -240,6 +239,15 @@ fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
             }
             tokens.next();
             Ok(Box::new(Ast::Print(print)))
+        }
+        Some(TokenType::LeftBrace) => {
+            tokens.next();
+            let mut block = vec![];
+            while !tokens.check(&|t| t == &TokenType::RightBrace) {
+                block.push(parse_declaration(tokens)?);
+            }
+            tokens.next();
+            Ok(Box::new(Ast::Block(block)))
         }
         _ => {
             let stmt = parse_expression(tokens)?;
