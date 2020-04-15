@@ -53,7 +53,7 @@ pub enum ParserError {
     TODO,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Ast {
     // Misc
     Program(Vec<Box<Ast>>),
@@ -63,8 +63,7 @@ pub enum Ast {
     // primary
     Number(f64),
     String(String),
-    False,
-    True,
+    Bool(bool),
     Nil,
     Identifier(String),
 
@@ -112,11 +111,11 @@ fn parse_primary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
         }
         Some(TokenType::False) => {
             tokens.next();
-            Ok(Box::new(Ast::False))
+            Ok(Box::new(Ast::Bool(false)))
         }
         Some(TokenType::True) => {
             tokens.next();
-            Ok(Box::new(Ast::True))
+            Ok(Box::new(Ast::Bool(true)))
         }
         Some(TokenType::Nil) => {
             tokens.next();

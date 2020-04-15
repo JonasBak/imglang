@@ -25,7 +25,7 @@ fn main() {
                 return;
             }
         };
-        println!("{:?}", tokens);
+        println!("TOKENS: {:?}", tokens);
         let ast = match parse_program(tokens) {
             Ok(ast) => ast,
             Err(error) => {
@@ -33,8 +33,8 @@ fn main() {
                 return;
             }
         };
-        println!("{:?}", ast);
-        println!("{:?}", env.eval(*ast));
+        println!("AST: {:?}", ast);
+        println!("RESULT: {:?}", env.eval(*ast));
     } else {
         println!("REPL");
         io::stdout().flush().unwrap();
@@ -53,7 +53,7 @@ fn main() {
                     continue;
                 }
             };
-            println!("{:?}", tokens);
+            println!("TOKENS: {:?}", tokens);
             let ast = match parse_program(tokens) {
                 Ok(ast) => ast,
                 Err(error) => {
@@ -61,8 +61,8 @@ fn main() {
                     continue;
                 }
             };
-            println!("{:?}", ast);
-            println!("{:?}", env.eval(*ast));
+            println!("AST: {:?}", ast);
+            println!("RESULT: {:?}", env.eval(*ast));
         }
     }
 }

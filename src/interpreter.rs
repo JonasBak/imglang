@@ -78,13 +78,12 @@ impl Scope {
             }
             Ast::Print(expr) => {
                 let value = self.eval(*expr)?;
-                println!("PRINT: {:?}", value);
+                println!("< {:?}", value);
                 Value::Nil
             }
             Ast::Number(n) => Value::Number(n),
             Ast::String(s) => Value::String(s),
-            Ast::False => Value::Bool(false),
-            Ast::True => Value::Bool(true),
+            Ast::Bool(b) => Value::Bool(b),
             Ast::Nil => Value::Nil,
             Ast::Identifier(identifier) => self
                 .get(&identifier)
