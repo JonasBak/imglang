@@ -58,8 +58,12 @@ pub enum Ast {
     // Misc
     Program(Vec<Box<Ast>>),
     Decl(String, Box<Ast>),
+    Assign(String, Box<Ast>),
     Print(Box<Ast>),
     Block(Vec<Box<Ast>>),
+
+    // Flow
+    While { condition: Box<Ast>, body: Box<Ast> },
 
     // primary
     Number(f64),
@@ -222,7 +226,18 @@ fn parse_equality(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
 }
 
 fn parse_assignment(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    parse_equality(tokens)
+    let left = parse_equality(tokens)?;
+    match tokens.peek_t() {
+        Some(TokenType::Equal) => match *left {
+            Ast::Identifier(identifier) => {
+                tokens.next();
+                let value = parse_assignment(tokens)?;
+                Ok(Box::new(Ast::Assign(identifier, value)))
+            }
+            _ => Err(tokens.unexpected()),
+        },
+        _ => Ok(left),
+    }
 }
 
 fn parse_expression(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
@@ -248,6 +263,20 @@ fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
             }
             tokens.next();
             Ok(Box::new(Ast::Block(block)))
+        }
+        Some(TokenType::While) => {
+            tokens.next();
+            if !tokens.check(&|t| t == &TokenType::LeftPar) {
+                return Err(tokens.unexpected());
+            }
+            tokens.next();
+            let condition = parse_expression(tokens)?;
+            if !tokens.check(&|t| t == &TokenType::RightPar) {
+                return Err(tokens.unexpected());
+            }
+            tokens.next();
+            let body = parse_statement(tokens)?;
+            Ok(Box::new(Ast::While { condition, body }))
         }
         _ => {
             let stmt = parse_expression(tokens)?;

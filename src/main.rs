@@ -34,7 +34,7 @@ fn main() {
             }
         };
         println!("AST: {:?}", ast);
-        println!("RESULT: {:?}", env.eval(*ast));
+        println!("RESULT: {:?}", ast.eval(&mut env));
     } else {
         println!("REPL");
         io::stdout().flush().unwrap();
@@ -62,7 +62,7 @@ fn main() {
                 }
             };
             println!("AST: {:?}", ast);
-            println!("RESULT: {:?}", env.eval(*ast));
+            println!("RESULT: {:?}", ast.eval(&mut env));
         }
     }
 }
