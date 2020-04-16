@@ -69,6 +69,7 @@ pub enum Ast {
     Assign(String, Box<Ast>),
     Print(Box<Ast>),
     Block(Vec<Box<Ast>>),
+    Call(String, Vec<Box<Ast>>),
 
     // Flow
     While { condition: Box<Ast>, body: Box<Ast> },
@@ -146,6 +147,30 @@ fn parse_primary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     }
 }
 
+fn parse_call(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
+    let left = parse_primary(tokens)?;
+
+    match tokens.peek_t() {
+        Some(TokenType::LeftPar) => match *left {
+            Ast::Identifier(identifier) => {
+                tokens.next();
+                let mut args = vec![];
+                if !tokens.check(&|t| t == &TokenType::RightPar) {
+                    args.push(parse_expression(tokens)?);
+                    while tokens.check(&|t| t == &TokenType::Comma) {
+                        tokens.next();
+                        args.push(parse_expression(tokens)?);
+                    }
+                }
+                expect(tokens, &|t| t == &TokenType::RightPar)?;
+                Ok(Box::new(Ast::Call(identifier, args)))
+            }
+            _ => Err(tokens.unexpected()),
+        },
+        _ => Ok(left),
+    }
+}
+
 fn parse_unary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     let unary = match tokens.peek_t() {
         Some(TokenType::Bang) => {
@@ -156,7 +181,7 @@ fn parse_unary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
             tokens.next();
             Box::new(Ast::Negated(parse_unary(tokens)?))
         }
-        _ => parse_primary(tokens)?,
+        _ => parse_call(tokens)?,
     };
     Ok(unary)
 }
@@ -263,7 +288,7 @@ fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
             while !tokens.check(&|t| t == &TokenType::RightBrace) {
                 block.push(parse_declaration(tokens)?);
             }
-            tokens.next();
+            expect(tokens, &|t| t == &TokenType::RightBrace)?;
             Ok(Box::new(Ast::Block(block)))
         }
         Some(TokenType::While) => {

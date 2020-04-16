@@ -9,21 +9,24 @@ pub enum RuntimeError {
     MismatchedTypes(Value, Value),
     IllegalOperation(Value, Value),
     UndefinedVariable(String),
+    NotCallable(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     String(String),
     Number(f64),
     Bool(bool),
     Nil,
+
+    ExternFunction(fn(Vec<Value>) -> Value),
 }
 
 impl Value {
     fn t(&self) -> mem::Discriminant<Value> {
         mem::discriminant(self)
     }
-    pub fn truthy(&self) -> bool {
+    fn truthy(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
             _ => false,
@@ -55,14 +58,14 @@ impl Scope {
     fn pop(&mut self) {
         self.maps.pop();
     }
-    fn get(&self, identifier: &String) -> Option<Value> {
+    pub fn get(&self, identifier: &String) -> Option<Value> {
         self.maps
             .iter()
             .rev()
             .find_map(|map| map.get(identifier))
             .map(|value| value.clone())
     }
-    fn declare(&mut self, identifier: &String, value: Value) -> RuntimeResult<()> {
+    pub fn declare(&mut self, identifier: &String, value: Value) -> RuntimeResult<()> {
         self.maps
             .last_mut()
             .unwrap()
@@ -116,6 +119,16 @@ impl Ast {
                 }
                 scope.pop();
                 Value::Nil
+            }
+            Ast::Call(func, args) => {
+                let mut args_values = vec![];
+                for stat in args.into_iter() {
+                    args_values.push(stat.eval(scope)?);
+                }
+                match scope.get(func) {
+                    Some(Value::ExternFunction(f)) => f(args_values),
+                    _ => return Err(RuntimeError::NotCallable(func.clone())),
+                }
             }
             Ast::While { condition, body } => {
                 while condition.eval(scope)?.truthy() {
