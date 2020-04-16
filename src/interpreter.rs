@@ -4,12 +4,13 @@ use std::mem;
 
 type RuntimeResult<T> = Result<T, RuntimeError>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RuntimeError {
     MismatchedTypes(Value, Value),
     IllegalOperation(Value, Value),
     UndefinedVariable(String),
     NotCallable(String),
+    WrongArity(usize, usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +20,7 @@ pub enum Value {
     Bool(bool),
     Nil,
 
+    Function(Vec<String>, Box<Ast>),
     ExternFunction(fn(Vec<Value>) -> Value),
 }
 
@@ -115,7 +117,10 @@ impl Ast {
             Ast::Block(exprs) => {
                 scope.push();
                 for stat in exprs.into_iter() {
-                    println!("{:?}", stat.eval(scope)?);
+                    if let Err(error) = stat.eval(scope) {
+                        scope.pop();
+                        return Err(error);
+                    }
                 }
                 scope.pop();
                 Value::Nil
@@ -127,8 +132,30 @@ impl Ast {
                 }
                 match scope.get(func) {
                     Some(Value::ExternFunction(f)) => f(args_values),
+                    Some(Value::Function(args_names, block)) => {
+                        if args_names.len() != args_values.len() {
+                            return Err(RuntimeError::WrongArity(
+                                args_names.len(),
+                                args_values.len(),
+                            ));
+                        }
+                        scope.push();
+                        for (i, arg) in args_values.into_iter().enumerate() {
+                            if let Err(error) = scope.declare(&args_names[i], arg) {
+                                scope.pop();
+                                return Err(error);
+                            }
+                        }
+                        let v = block.eval(scope);
+                        scope.pop();
+                        v?
+                    }
                     _ => return Err(RuntimeError::NotCallable(func.clone())),
                 }
+            }
+            Ast::Function(func, args, block) => {
+                scope.declare(func, Value::Function(args.clone(), block.clone()))?;
+                Value::Nil
             }
             Ast::While { condition, body } => {
                 while condition.eval(scope)?.truthy() {

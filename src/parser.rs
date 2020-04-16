@@ -18,6 +18,13 @@ trait TokenIterator<'a>: Iterator<Item = &'a Token> {
             None => ParserError::TODO,
         }
     }
+    fn next_if(&mut self, p: &dyn Fn(&TokenType) -> bool) -> bool {
+        if self.peek_t().map(|t| p(t)).unwrap_or(false) {
+            self.next();
+            return true;
+        }
+        false
+    }
 }
 
 fn map_when<T>(
@@ -36,8 +43,8 @@ where
     }
 }
 
-fn expect(tokens: &mut dyn TokenIterator, ped: &dyn Fn(&TokenType) -> bool) -> ParserResult<()> {
-    if tokens.peek_t().map(|t| ped(t)).unwrap_or(false) {
+fn expect(tokens: &mut dyn TokenIterator, p: &dyn Fn(&TokenType) -> bool) -> ParserResult<()> {
+    if tokens.peek_t().map(|t| p(t)).unwrap_or(false) {
         tokens.next();
         return Ok(());
     }
@@ -61,7 +68,7 @@ pub enum ParserError {
     TODO,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ast {
     // Misc
     Program(Vec<Box<Ast>>),
@@ -70,6 +77,7 @@ pub enum Ast {
     Print(Box<Ast>),
     Block(Vec<Box<Ast>>),
     Call(String, Vec<Box<Ast>>),
+    Function(String, Vec<String>, Box<Ast>),
 
     // Flow
     While { condition: Box<Ast>, body: Box<Ast> },
@@ -156,11 +164,10 @@ fn parse_call(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
                 tokens.next();
                 let mut args = vec![];
                 if !tokens.check(&|t| t == &TokenType::RightPar) {
-                    args.push(parse_expression(tokens)?);
-                    while tokens.check(&|t| t == &TokenType::Comma) {
-                        tokens.next();
+                    while {
                         args.push(parse_expression(tokens)?);
-                    }
+                        tokens.next_if(&|t| t == &TokenType::Comma)
+                    } {}
                 }
                 expect(tokens, &|t| t == &TokenType::RightPar)?;
                 Ok(Box::new(Ast::Call(identifier, args)))
@@ -274,6 +281,16 @@ fn parse_expression(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     parse_assignment(tokens)
 }
 
+fn parse_block(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
+    expect(tokens, &|t| t == &TokenType::LeftBrace)?;
+    let mut block = vec![];
+    while !tokens.check(&|t| t == &TokenType::RightBrace) {
+        block.push(parse_declaration(tokens)?);
+    }
+    expect(tokens, &|t| t == &TokenType::RightBrace)?;
+    Ok(Box::new(Ast::Block(block)))
+}
+
 fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     match tokens.peek_t() {
         Some(TokenType::Print) => {
@@ -282,15 +299,7 @@ fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
             expect(tokens, &|t| t == &TokenType::Semicolon)?;
             Ok(Box::new(Ast::Print(print)))
         }
-        Some(TokenType::LeftBrace) => {
-            tokens.next();
-            let mut block = vec![];
-            while !tokens.check(&|t| t == &TokenType::RightBrace) {
-                block.push(parse_declaration(tokens)?);
-            }
-            expect(tokens, &|t| t == &TokenType::RightBrace)?;
-            Ok(Box::new(Ast::Block(block)))
-        }
+        Some(TokenType::LeftBrace) => parse_block(tokens),
         Some(TokenType::While) => {
             tokens.next();
             expect(tokens, &|t| t == &TokenType::LeftPar)?;
@@ -319,6 +328,28 @@ fn parse_declaration(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
             let expr = parse_expression(tokens)?;
             expect(tokens, &|t| t == &TokenType::Semicolon)?;
             Ok(Box::new(Ast::Decl(identifier, expr)))
+        }
+        Some(TokenType::Fun) => {
+            tokens.next();
+            let identifier = map_when(tokens, &|t| match t {
+                TokenType::Identifier(s) => Some(s.clone()),
+                _ => None,
+            })?;
+            expect(tokens, &|t| t == &TokenType::LeftPar)?;
+            let mut args = vec![];
+            if !tokens.check(&|t| t == &TokenType::RightPar) {
+                while {
+                    let arg = map_when(tokens, &|t| match t {
+                        TokenType::Identifier(s) => Some(s.clone()),
+                        _ => None,
+                    })?;
+                    args.push(arg);
+                    tokens.next_if(&|t| t == &TokenType::Comma)
+                } {}
+            }
+            expect(tokens, &|t| t == &TokenType::RightPar)?;
+            let block = parse_block(tokens)?;
+            Ok(Box::new(Ast::Function(identifier, args, block)))
         }
         _ => parse_statement(tokens),
     }
