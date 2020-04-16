@@ -40,26 +40,36 @@ fn main() {
         io::stdout().flush().unwrap();
         let stdin = io::stdin();
         let mut lines = stdin.lock().lines().peekable();
-        while {
+        'l: while {
             print!("> ");
             io::stdout().flush().unwrap();
             lines.peek().is_some()
         } {
-            let source = lines.next().unwrap().unwrap();
-            let tokens = match parse_string(&source) {
-                Ok(t) => t,
-                Err(error) => {
-                    print_lexer_err(&source, error);
-                    continue;
-                }
-            };
-            println!("TOKENS: {:?}", tokens);
-            let ast = match parse_program(tokens) {
-                Ok(ast) => ast,
-                Err(error) => {
-                    print_parser_err(&source, error);
-                    continue;
-                }
+            let mut source = lines.next().unwrap().unwrap();
+            let ast = loop {
+                let tokens = match parse_string(&source) {
+                    Ok(t) => t,
+                    Err(error) => {
+                        print_lexer_err(&source, error);
+                        continue 'l;
+                    }
+                };
+                match parse_program(tokens) {
+                    Ok(ast) => break ast,
+                    Err(ParserError::UnexpectedToken(Token {
+                        t: TokenType::Eof, ..
+                    })) => {
+                        print!("... ");
+                        io::stdout().flush().unwrap();
+                        source += "\n";
+                        source += &lines.next().unwrap().unwrap();
+                        continue;
+                    }
+                    Err(error) => {
+                        print_parser_err(&source, error);
+                        continue 'l;
+                    }
+                };
             };
             println!("AST: {:?}", ast);
             println!("RESULT: {:?}", ast.eval(&mut env));

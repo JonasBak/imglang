@@ -9,8 +9,8 @@ trait TokenIterator<'a>: Iterator<Item = &'a Token> {
     fn next_t(&mut self) -> Option<&'a TokenType> {
         self.next().map(|t| &t.t)
     }
-    fn check(&mut self, ped: &dyn Fn(&TokenType) -> bool) -> bool {
-        self.peek_t().map(|t| ped(t)).unwrap_or(false)
+    fn check(&mut self, p: &dyn Fn(&TokenType) -> bool) -> bool {
+        self.peek_t().map(|t| p(t)).unwrap_or(false)
     }
     fn unexpected(&mut self) -> ParserError {
         match self.next() {
@@ -36,6 +36,14 @@ where
     }
 }
 
+fn expect(tokens: &mut dyn TokenIterator, ped: &dyn Fn(&TokenType) -> bool) -> ParserResult<()> {
+    if tokens.peek_t().map(|t| ped(t)).unwrap_or(false) {
+        tokens.next();
+        return Ok(());
+    }
+    Err(tokens.unexpected())
+}
+
 impl<'a, I> TokenIterator<'a> for Peekable<I>
 where
     I: Iterator<Item = &'a Token>,
@@ -47,7 +55,7 @@ where
 
 pub type ParserResult<T> = Result<T, ParserError>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ParserError {
     UnexpectedToken(Token),
     TODO,
@@ -98,7 +106,7 @@ pub fn parse_program(tokens: Vec<Token>) -> ParserResult<Box<Ast>> {
     while !tokens.check(&|t| t == &TokenType::Eof) {
         prog.push(parse_declaration(&mut tokens)?);
     }
-    tokens.next();
+    expect(&mut tokens, &|t| t == &TokenType::Eof)?;
     Ok(Box::new(Ast::Program(prog)))
 }
 
@@ -131,10 +139,7 @@ fn parse_primary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
         Some(TokenType::LeftPar) => {
             tokens.next();
             let node = parse_expression(tokens)?;
-            if !tokens.check(&|t| t == &TokenType::RightPar) {
-                return Err(tokens.unexpected());
-            }
-            tokens.next();
+            expect(tokens, &|t| t == &TokenType::RightPar)?;
             Ok(node)
         }
         _ => Err(tokens.unexpected()),
@@ -249,10 +254,7 @@ fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
         Some(TokenType::Print) => {
             tokens.next();
             let print = parse_expression(tokens)?;
-            if !tokens.check(&|t| t == &TokenType::Semicolon) {
-                return Err(tokens.unexpected());
-            }
-            tokens.next();
+            expect(tokens, &|t| t == &TokenType::Semicolon)?;
             Ok(Box::new(Ast::Print(print)))
         }
         Some(TokenType::LeftBrace) => {
@@ -266,24 +268,15 @@ fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
         }
         Some(TokenType::While) => {
             tokens.next();
-            if !tokens.check(&|t| t == &TokenType::LeftPar) {
-                return Err(tokens.unexpected());
-            }
-            tokens.next();
+            expect(tokens, &|t| t == &TokenType::LeftPar)?;
             let condition = parse_expression(tokens)?;
-            if !tokens.check(&|t| t == &TokenType::RightPar) {
-                return Err(tokens.unexpected());
-            }
-            tokens.next();
+            expect(tokens, &|t| t == &TokenType::RightPar)?;
             let body = parse_statement(tokens)?;
             Ok(Box::new(Ast::While { condition, body }))
         }
         _ => {
             let stmt = parse_expression(tokens)?;
-            if !tokens.check(&|t| t == &TokenType::Semicolon) {
-                return Err(tokens.unexpected());
-            }
-            tokens.next();
+            expect(tokens, &|t| t == &TokenType::Semicolon)?;
             Ok(stmt)
         }
     }
@@ -297,15 +290,9 @@ fn parse_declaration(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
                 TokenType::Identifier(s) => Some(s.clone()),
                 _ => None,
             })?;
-            if !tokens.check(&|t| t == &TokenType::Equal) {
-                return Err(tokens.unexpected());
-            }
-            tokens.next();
+            expect(tokens, &|t| t == &TokenType::Equal)?;
             let expr = parse_expression(tokens)?;
-            if !tokens.check(&|t| t == &TokenType::Semicolon) {
-                return Err(tokens.unexpected());
-            }
-            tokens.next();
+            expect(tokens, &|t| t == &TokenType::Semicolon)?;
             Ok(Box::new(Ast::Decl(identifier, expr)))
         }
         _ => parse_statement(tokens),
