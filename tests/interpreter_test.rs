@@ -114,3 +114,46 @@ fn nested_scopes() {
         Some(Value::Number(2.0))
     );
 }
+
+#[test]
+fn test_if() {
+    let scope = Environment::new();
+    let source = "
+        var a = 0;
+        if (true) a = 1;
+        if (false) a = 10;
+        "
+    .to_string();
+    let tokens = parse_string(&source).unwrap();
+    let ast = parse_program(tokens).unwrap();
+    ast.eval(&scope).unwrap();
+    assert_eq!(
+        get_value(&scope, &"a".to_string()),
+        Some(Value::Number(1.0))
+    );
+}
+
+#[test]
+fn test_if_else() {
+    let scope = Environment::new();
+    let source = "
+        var a = 0;
+        var b = 0;
+        if (true) a = 1;
+        else b = 10;
+        if (false) a = 10;
+        else b = 1;
+        "
+    .to_string();
+    let tokens = parse_string(&source).unwrap();
+    let ast = parse_program(tokens).unwrap();
+    ast.eval(&scope).unwrap();
+    assert_eq!(
+        get_value(&scope, &"a".to_string()),
+        Some(Value::Number(1.0))
+    );
+    assert_eq!(
+        get_value(&scope, &"b".to_string()),
+        Some(Value::Number(1.0))
+    );
+}

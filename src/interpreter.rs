@@ -159,6 +159,18 @@ impl Ast {
                 }
                 Value::Nil
             }
+            Ast::If {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                if condition.eval(scope)?.truthy() {
+                    if_true.eval(scope)?;
+                } else if let Some(if_false) = if_false {
+                    if_false.eval(scope)?;
+                }
+                Value::Nil
+            }
             Ast::Number(n) => Value::Number(*n),
             Ast::String(s) => Value::String(s.clone()),
             Ast::Bool(b) => Value::Bool(*b),

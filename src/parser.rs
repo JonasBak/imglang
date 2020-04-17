@@ -80,7 +80,15 @@ pub enum Ast {
     Function(String, Vec<String>, Box<Ast>),
 
     // Flow
-    While { condition: Box<Ast>, body: Box<Ast> },
+    While {
+        condition: Box<Ast>,
+        body: Box<Ast>,
+    },
+    If {
+        condition: Box<Ast>,
+        if_true: Box<Ast>,
+        if_false: Option<Box<Ast>>,
+    },
 
     // primary
     Number(f64),
@@ -307,6 +315,23 @@ fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
             expect(tokens, &|t| t == &TokenType::RightPar)?;
             let body = parse_statement(tokens)?;
             Ok(Box::new(Ast::While { condition, body }))
+        }
+        Some(TokenType::If) => {
+            tokens.next();
+            expect(tokens, &|t| t == &TokenType::LeftPar)?;
+            let condition = parse_expression(tokens)?;
+            expect(tokens, &|t| t == &TokenType::RightPar)?;
+            let if_true = parse_statement(tokens)?;
+            let if_false = if tokens.next_if(&|t| t == &TokenType::Else) {
+                Some(parse_statement(tokens)?)
+            } else {
+                None
+            };
+            Ok(Box::new(Ast::If {
+                condition,
+                if_true,
+                if_false,
+            }))
         }
         _ => {
             let stmt = parse_expression(tokens)?;
