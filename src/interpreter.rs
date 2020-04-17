@@ -4,10 +4,13 @@ use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 
-type RuntimeResult<T> = Result<T, RuntimeError>;
+type RuntimeResult<T> = Result<T, RuntimeControl>;
 
 #[derive(Debug, PartialEq)]
-pub enum RuntimeError {
+pub enum RuntimeControl {
+    Return(Value),
+
+    // Errors
     MismatchedTypes(Value, Value),
     IllegalOperation(Value, Value),
     UndefinedVariable(String),
@@ -22,7 +25,7 @@ pub enum Value {
     Bool(bool),
     Nil,
 
-    Function(Vec<String>, Box<Ast>),
+    Function(Vec<String>, Box<Ast>, Scope),
     ExternFunction(fn(Vec<Value>) -> Value),
 }
 
@@ -38,14 +41,15 @@ impl Value {
     }
 }
 
-fn handle_binary_error(a: Value, b: Value) -> RuntimeError {
+fn handle_binary_error(a: Value, b: Value) -> RuntimeControl {
     if a.t() == b.t() {
-        return RuntimeError::IllegalOperation(a, b);
+        return RuntimeControl::IllegalOperation(a, b);
     } else {
-        return RuntimeError::MismatchedTypes(a, b);
+        return RuntimeControl::MismatchedTypes(a, b);
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     parent: Option<Rc<RefCell<Environment>>>,
     map: HashMap<String, Value>,
@@ -88,10 +92,9 @@ fn assign(scope: &Scope, identifier: &String, value: Value) -> RuntimeResult<()>
         return Ok(());
     }
     if let Some(s) = &s.parent {
-        assign(&s, identifier, value)?;
-        Ok(())
+        assign(&s, identifier, value)
     } else {
-        Err(RuntimeError::UndefinedVariable(identifier.clone()))
+        Err(RuntimeControl::UndefinedVariable(identifier.clone()))
     }
 }
 
@@ -133,25 +136,39 @@ impl Ast {
                 }
                 match get_value(scope, func) {
                     Some(Value::ExternFunction(f)) => f(args_values),
-                    Some(Value::Function(args_names, block)) => {
+                    Some(Value::Function(args_names, block, func_scope)) => {
                         if args_names.len() != args_values.len() {
-                            return Err(RuntimeError::WrongArity(
+                            return Err(RuntimeControl::WrongArity(
                                 args_names.len(),
                                 args_values.len(),
                             ));
                         }
-                        let child_scope = child(scope);
+                        let child_scope = child(&func_scope);
                         for (i, arg) in args_values.into_iter().enumerate() {
                             declare(&child_scope, &args_names[i], arg)?;
                         }
-                        block.eval(&child_scope)?
+                        match block.eval(&child_scope) {
+                            Ok(v) => v,
+                            Err(RuntimeControl::Return(v)) => v,
+                            error @ _ => return error,
+                        }
                     }
-                    _ => return Err(RuntimeError::NotCallable(func.clone())),
+                    _ => return Err(RuntimeControl::NotCallable(func.clone())),
                 }
             }
             Ast::Function(func, args, block) => {
-                declare(scope, func, Value::Function(args.clone(), block.clone()))?;
+                declare(
+                    scope,
+                    func,
+                    Value::Function(args.clone(), block.clone(), scope.clone()),
+                )?;
                 Value::Nil
+            }
+            Ast::Return(expr) => {
+                if let Some(expr) = expr {
+                    return Err(RuntimeControl::Return(expr.eval(scope)?));
+                }
+                return Err(RuntimeControl::Return(Value::Nil));
             }
             Ast::While { condition, body } => {
                 while condition.eval(scope)?.truthy() {
@@ -176,7 +193,7 @@ impl Ast {
             Ast::Bool(b) => Value::Bool(*b),
             Ast::Nil => Value::Nil,
             Ast::Identifier(identifier) => get_value(scope, &identifier)
-                .ok_or(RuntimeError::UndefinedVariable(identifier.clone()))?,
+                .ok_or(RuntimeControl::UndefinedVariable(identifier.clone()))?,
             Ast::Bang(a) => Value::Bool(!a.eval(scope)?.truthy()),
             Ast::Negated(a) => match a.eval(scope)? {
                 Value::Number(n) => Value::Number(-n),
@@ -221,7 +238,14 @@ impl Ast {
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
                 tup @ _ => return Err(handle_binary_error(tup.0, tup.1)),
             },
-            _ => panic!("not implemented"),
+            Ast::NotEq(a, b) => match (a.eval(scope)?, b.eval(scope)?) {
+                (Value::Number(a), Value::Number(b)) => Value::Bool(a != b),
+                (Value::String(a), Value::String(b)) => Value::Bool(a != b),
+                (Value::Bool(a), Value::Bool(b)) => Value::Bool(a != b),
+                tup @ _ => return Err(handle_binary_error(tup.0, tup.1)),
+            },
+            Ast::And(a, b) => Value::Bool(a.eval(scope)?.truthy() && b.eval(scope)?.truthy()),
+            Ast::Or(a, b) => Value::Bool(a.eval(scope)?.truthy() || b.eval(scope)?.truthy()),
         };
         Ok(val)
     }

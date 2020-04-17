@@ -78,8 +78,7 @@ pub enum Ast {
     Block(Vec<Box<Ast>>),
     Call(String, Vec<Box<Ast>>),
     Function(String, Vec<String>, Box<Ast>),
-
-    // Flow
+    Return(Option<Box<Ast>>),
     While {
         condition: Box<Ast>,
         body: Box<Ast>,
@@ -115,6 +114,9 @@ pub enum Ast {
 
     Eq(Box<Ast>, Box<Ast>),
     NotEq(Box<Ast>, Box<Ast>),
+
+    And(Box<Ast>, Box<Ast>),
+    Or(Box<Ast>, Box<Ast>),
 }
 
 pub fn parse_program(tokens: Vec<Token>) -> ParserResult<Box<Ast>> {
@@ -270,8 +272,26 @@ fn parse_equality(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
     Ok(eq)
 }
 
+fn parse_and(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
+    let mut left = parse_equality(tokens)?;
+
+    while tokens.next_if(&|t| t == &TokenType::And) {
+        left = Box::new(Ast::And(left, parse_and(tokens)?));
+    }
+    Ok(left)
+}
+
+fn parse_or(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
+    let mut left = parse_and(tokens)?;
+
+    while tokens.next_if(&|t| t == &TokenType::Or) {
+        left = Box::new(Ast::Or(left, parse_and(tokens)?));
+    }
+    Ok(left)
+}
+
 fn parse_assignment(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let left = parse_equality(tokens)?;
+    let left = parse_or(tokens)?;
     match tokens.peek_t() {
         Some(TokenType::Equal) => match *left {
             Ast::Identifier(identifier) => {
@@ -332,6 +352,16 @@ fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
                 if_true,
                 if_false,
             }))
+        }
+        Some(TokenType::Return) => {
+            tokens.next();
+            let expr = if !tokens.check(&|t| t == &TokenType::Semicolon) {
+                Some(parse_expression(tokens)?)
+            } else {
+                None
+            };
+            expect(tokens, &|t| t == &TokenType::Semicolon)?;
+            Ok(Box::new(Ast::Return(expr)))
         }
         _ => {
             let stmt = parse_expression(tokens)?;
