@@ -1,6 +1,8 @@
 use super::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem;
+use std::rc::Rc;
 
 type RuntimeResult<T> = Result<T, RuntimeError>;
 
@@ -44,54 +46,57 @@ fn handle_binary_error(a: Value, b: Value) -> RuntimeError {
     }
 }
 
-pub struct Scope {
-    maps: Vec<HashMap<String, Value>>,
+pub struct Environment {
+    parent: Option<Rc<RefCell<Environment>>>,
+    map: HashMap<String, Value>,
+}
+type Scope = Rc<RefCell<Environment>>;
+
+impl Environment {
+    pub fn new() -> Scope {
+        Rc::new(RefCell::new(Environment {
+            parent: None,
+            map: HashMap::new(),
+        }))
+    }
 }
 
-impl Scope {
-    pub fn new() -> Scope {
-        Scope {
-            maps: vec![HashMap::new()],
-        }
+pub fn get_value(scope: &Scope, identifier: &String) -> Option<Value> {
+    let s = scope.borrow();
+    if let Some(value) = s.map.get(identifier) {
+        Some(value.clone())
+    } else if let Some(s) = &s.parent {
+        get_value(&s, identifier)
+    } else {
+        None
     }
-    fn push(&mut self) {
-        self.maps.push(HashMap::new());
+}
+fn child(scope: &Scope) -> Scope {
+    Rc::new(RefCell::new(Environment {
+        parent: Some(scope.clone()),
+        map: HashMap::new(),
+    }))
+}
+pub fn declare(scope: &Scope, identifier: &String, value: Value) -> RuntimeResult<()> {
+    scope.borrow_mut().map.insert(identifier.clone(), value);
+    Ok(())
+}
+fn assign(scope: &Scope, identifier: &String, value: Value) -> RuntimeResult<()> {
+    let mut s = scope.borrow_mut();
+    if s.map.get(identifier).is_some() {
+        s.map.insert(identifier.clone(), value);
+        return Ok(());
     }
-    fn pop(&mut self) {
-        self.maps.pop();
-    }
-    pub fn get(&self, identifier: &String) -> Option<Value> {
-        self.maps
-            .iter()
-            .rev()
-            .find_map(|map| map.get(identifier))
-            .map(|value| value.clone())
-    }
-    pub fn declare(&mut self, identifier: &String, value: Value) -> RuntimeResult<()> {
-        self.maps
-            .last_mut()
-            .unwrap()
-            .insert(identifier.clone(), value);
+    if let Some(s) = &s.parent {
+        assign(&s, identifier, value)?;
         Ok(())
-    }
-    fn assign(&mut self, identifier: &String, value: Value) -> RuntimeResult<()> {
-        match self
-            .maps
-            .iter_mut()
-            .rev()
-            .find(|map| map.get(identifier).is_some())
-        {
-            Some(scope) => {
-                scope.insert(identifier.clone(), value);
-                Ok(())
-            }
-            None => Err(RuntimeError::UndefinedVariable(identifier.clone())),
-        }
+    } else {
+        Err(RuntimeError::UndefinedVariable(identifier.clone()))
     }
 }
 
 impl Ast {
-    pub fn eval(&self, scope: &mut Scope) -> RuntimeResult<Value> {
+    pub fn eval(&self, scope: &Scope) -> RuntimeResult<Value> {
         let val = match self {
             Ast::Program(prog) => {
                 for stat in prog.into_iter() {
@@ -101,12 +106,12 @@ impl Ast {
             }
             Ast::Decl(identifier, expr) => {
                 let value = expr.eval(scope)?;
-                scope.declare(&identifier, value)?;
+                declare(scope, &identifier, value)?;
                 Value::Nil
             }
             Ast::Assign(identifier, expr) => {
                 let value = expr.eval(scope)?;
-                scope.assign(&identifier, value)?;
+                assign(scope, &identifier, value)?;
                 Value::Nil
             }
             Ast::Print(expr) => {
@@ -115,14 +120,10 @@ impl Ast {
                 Value::Nil
             }
             Ast::Block(exprs) => {
-                scope.push();
+                let child_scope = child(scope);
                 for stat in exprs.into_iter() {
-                    if let Err(error) = stat.eval(scope) {
-                        scope.pop();
-                        return Err(error);
-                    }
+                    stat.eval(&child_scope)?;
                 }
-                scope.pop();
                 Value::Nil
             }
             Ast::Call(func, args) => {
@@ -130,7 +131,7 @@ impl Ast {
                 for stat in args.into_iter() {
                     args_values.push(stat.eval(scope)?);
                 }
-                match scope.get(func) {
+                match get_value(scope, func) {
                     Some(Value::ExternFunction(f)) => f(args_values),
                     Some(Value::Function(args_names, block)) => {
                         if args_names.len() != args_values.len() {
@@ -139,22 +140,17 @@ impl Ast {
                                 args_values.len(),
                             ));
                         }
-                        scope.push();
+                        let child_scope = child(scope);
                         for (i, arg) in args_values.into_iter().enumerate() {
-                            if let Err(error) = scope.declare(&args_names[i], arg) {
-                                scope.pop();
-                                return Err(error);
-                            }
+                            declare(&child_scope, &args_names[i], arg)?;
                         }
-                        let v = block.eval(scope);
-                        scope.pop();
-                        v?
+                        block.eval(&child_scope)?
                     }
                     _ => return Err(RuntimeError::NotCallable(func.clone())),
                 }
             }
             Ast::Function(func, args, block) => {
-                scope.declare(func, Value::Function(args.clone(), block.clone()))?;
+                declare(scope, func, Value::Function(args.clone(), block.clone()))?;
                 Value::Nil
             }
             Ast::While { condition, body } => {
@@ -167,8 +163,7 @@ impl Ast {
             Ast::String(s) => Value::String(s.clone()),
             Ast::Bool(b) => Value::Bool(*b),
             Ast::Nil => Value::Nil,
-            Ast::Identifier(identifier) => scope
-                .get(&identifier)
+            Ast::Identifier(identifier) => get_value(scope, &identifier)
                 .ok_or(RuntimeError::UndefinedVariable(identifier.clone()))?,
             Ast::Bang(a) => Value::Bool(!a.eval(scope)?.truthy()),
             Ast::Negated(a) => match a.eval(scope)? {

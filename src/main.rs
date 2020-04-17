@@ -13,7 +13,7 @@ use std::io::{self, BufRead, Write};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let mut env = Scope::new();
+    let scope = Environment::new();
     if args.len() > 2 {
         println!("usage imglang [script]");
     } else if args.len() == 2 {
@@ -34,7 +34,7 @@ fn main() {
             }
         };
         println!("AST: {:?}", ast);
-        println!("RESULT: {:?}", ast.eval(&mut env));
+        println!("RESULT: {:?}", ast.eval(&scope));
     } else {
         println!("REPL");
         io::stdout().flush().unwrap();
@@ -72,7 +72,7 @@ fn main() {
                 };
             };
             println!("AST: {:?}", ast);
-            println!("RESULT: {:?}", ast.eval(&mut env));
+            println!("RESULT: {:?}", ast.eval(&scope));
         }
     }
 }

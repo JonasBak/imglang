@@ -2,8 +2,9 @@ use imglang::*;
 
 #[test]
 fn extern_function_call_and_variable_declaration() {
-    let mut env = Scope::new();
-    env.declare(
+    let scope = Environment::new();
+    declare(
+        &scope,
         &"five".to_string(),
         Value::ExternFunction(|_| Value::Number(5.0)),
     )
@@ -11,14 +12,18 @@ fn extern_function_call_and_variable_declaration() {
     let source = "var abc = five();".to_string();
     let tokens = parse_string(&source).unwrap();
     let ast = parse_program(tokens).unwrap();
-    ast.eval(&mut env).unwrap();
-    assert_eq!(env.get(&"abc".to_string()), Some(Value::Number(5.0)));
+    ast.eval(&scope).unwrap();
+    assert_eq!(
+        get_value(&scope, &"abc".to_string()),
+        Some(Value::Number(5.0))
+    );
 }
 
 #[test]
 fn number_of_arguments() {
-    let mut env = Scope::new();
-    env.declare(
+    let scope = Environment::new();
+    declare(
+        &scope,
         &"len".to_string(),
         Value::ExternFunction(|v| Value::Number(v.len() as f64)),
     )
@@ -33,10 +38,79 @@ fn number_of_arguments() {
     .to_string();
     let tokens = parse_string(&source).unwrap();
     let ast = parse_program(tokens).unwrap();
-    ast.eval(&mut env).unwrap();
-    assert_eq!(env.get(&"a".to_string()), Some(Value::Number(0.0)));
-    assert_eq!(env.get(&"b".to_string()), Some(Value::Number(1.0)));
-    assert_eq!(env.get(&"c".to_string()), Some(Value::Number(2.0)));
-    assert_eq!(env.get(&"d".to_string()), Some(Value::Number(3.0)));
-    assert_eq!(env.get(&"e".to_string()), Some(Value::Number(4.0)));
+    ast.eval(&scope).unwrap();
+    assert_eq!(
+        get_value(&scope, &"a".to_string()),
+        Some(Value::Number(0.0))
+    );
+    assert_eq!(
+        get_value(&scope, &"b".to_string()),
+        Some(Value::Number(1.0))
+    );
+    assert_eq!(
+        get_value(&scope, &"c".to_string()),
+        Some(Value::Number(2.0))
+    );
+    assert_eq!(
+        get_value(&scope, &"d".to_string()),
+        Some(Value::Number(3.0))
+    );
+    assert_eq!(
+        get_value(&scope, &"e".to_string()),
+        Some(Value::Number(4.0))
+    );
+}
+
+#[test]
+fn while_loop() {
+    let scope = Environment::new();
+    let source = "
+        var a = 0;
+        while (a < 10) {
+            a = a + 1;
+        }
+        "
+    .to_string();
+    let tokens = parse_string(&source).unwrap();
+    let ast = parse_program(tokens).unwrap();
+    ast.eval(&scope).unwrap();
+    assert_eq!(
+        get_value(&scope, &"a".to_string()),
+        Some(Value::Number(10.0))
+    );
+}
+
+#[test]
+fn nested_scopes() {
+    let scope = Environment::new();
+    let source = "
+        var a = 0;
+        var b = 0;
+        var c = 0;
+        {
+            var a = 1;
+            {
+                b = a;
+                var c = 10;
+            }
+            var a = a + b + c;
+            c = a;
+        }
+        "
+    .to_string();
+    let tokens = parse_string(&source).unwrap();
+    let ast = parse_program(tokens).unwrap();
+    ast.eval(&scope).unwrap();
+    assert_eq!(
+        get_value(&scope, &"a".to_string()),
+        Some(Value::Number(0.0))
+    );
+    assert_eq!(
+        get_value(&scope, &"b".to_string()),
+        Some(Value::Number(1.0))
+    );
+    assert_eq!(
+        get_value(&scope, &"c".to_string()),
+        Some(Value::Number(2.0))
+    );
 }
