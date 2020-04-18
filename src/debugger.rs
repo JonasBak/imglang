@@ -28,3 +28,35 @@ pub fn print_lexer_err(source: &String, error: LexerError) {
         }
     }
 }
+
+pub fn disassemble_chunk(chunk: &Chunk) {
+    println!("{:*^64}", "BYTECODE");
+    for i in 0..chunk.len_code() / 4 {
+        let ip = i * 4;
+        print!("{:0>6}\t", ip);
+        disassemble(get_op(&chunk, ip));
+    }
+    println!("{:*^64}", "DATA");
+    for i in 0..chunk.len_data() / 8 {
+        let p = i * 8;
+        println!("{:0>6}\t\t\t\tu64{: >24}", p, get_u64(&chunk, p as u8));
+        println!("\t\t\t\tf64{: >24}", get_f64(&chunk, p as u8));
+    }
+}
+
+pub fn disassemble(op: [u8; 4]) {
+    let op_code = match op[0] {
+        OP_RETURN => "RETURN",
+        OP_CONSTANT_I64 => "CONSTANT_I64",
+        OP_CONSTANT_F64 => "CONSTANT_F64",
+        OP_ADD_F64 => "ADD_F64",
+        OP_ADD_I64 => "ADD_I64",
+        OP_SUB_F64 => "SUB_F64",
+        OP_SUB_I64 => "SUB_I64",
+        _ => "???",
+    };
+    println!(
+        "{: >3} {: <24}\t{: >3}\t{: >3}\t{: >3}",
+        op[0], op_code, op[1], op[2], op[3]
+    );
+}

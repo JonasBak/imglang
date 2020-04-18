@@ -1,8 +1,16 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
+mod chunk;
+mod compiler;
 mod debugger;
 mod interpreter;
 mod lexer;
 mod parser;
+mod vm;
 
+use chunk::*;
+use compiler::*;
 use debugger::*;
 use interpreter::*;
 use lexer::*;
@@ -10,8 +18,9 @@ use parser::*;
 use std::env;
 use std::fs;
 use std::io::{self, BufRead, Write};
+use vm::*;
 
-fn main() {
+fn _interpreter() {
     let args: Vec<String> = env::args().collect();
     let scope = Environment::new();
     if args.len() > 2 {
@@ -75,4 +84,13 @@ fn main() {
             println!("RESULT: {:?}", ast.eval(&scope));
         }
     }
+}
+
+fn main() {
+    let mut chunk = Chunk::new();
+    let tokens = parse_string(&"1+2+3+4+5;".to_string()).unwrap();
+    let ast = parse_program(tokens).unwrap();
+    ast.codegen(&mut chunk);
+    disassemble_chunk(&chunk);
+    run_vm(chunk);
 }
