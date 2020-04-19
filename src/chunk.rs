@@ -10,6 +10,9 @@ pub const OP_SUB_F64: u8 = 6;
 pub const OP_NIL: u8 = 7;
 pub const OP_TRUE: u8 = 8;
 pub const OP_FALSE: u8 = 9;
+pub const OP_POP_U8: u8 = 10;
+pub const OP_POP_U64: u8 = 11;
+pub const OP_NOT: u8 = 12;
 
 pub struct Chunk {
     code: Vec<u8>,
@@ -66,7 +69,7 @@ pub fn get_op_u32(chunk: &Chunk, ip: usize) -> u32 {
 // to load value with constant opcodes
 // called by compiler
 
-pub fn add_f64(chunk: &mut Chunk, data: f64) -> u16 {
+pub fn add_const_f64(chunk: &mut Chunk, data: f64) -> u16 {
     chunk.data.extend_from_slice(&data.to_le_bytes());
     (chunk.data.len() - 8) as u16
 }
@@ -89,10 +92,23 @@ pub fn get_u64(chunk: &Chunk, i: u16) -> u64 {
 pub fn push_f64(chunk: &mut Chunk, data: f64) {
     chunk.stack.extend_from_slice(&data.to_le_bytes());
 }
-
 pub fn pop_f64(chunk: &mut Chunk) -> f64 {
     let l = chunk.stack.len() - 8;
     let v = f64::from_le_bytes(chunk.stack[l..].try_into().unwrap());
     chunk.stack.truncate(l);
     v
+}
+
+pub fn push_bool(chunk: &mut Chunk, data: bool) {
+    chunk.stack.push(data as u8);
+}
+pub fn pop_bool(chunk: &mut Chunk) -> bool {
+    chunk.stack.pop().unwrap() != 0
+}
+
+pub fn push_nil(chunk: &mut Chunk) {
+    chunk.stack.push(0);
+}
+pub fn pop_nil(chunk: &mut Chunk) {
+    chunk.stack.pop().unwrap();
 }

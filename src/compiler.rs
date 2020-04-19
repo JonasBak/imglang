@@ -14,13 +14,23 @@ impl Ast {
                 push_op(chunk, OP_RETURN);
             }
             Ast::Float(n) => {
-                let i = add_f64(chunk, *n);
+                let i = add_const_f64(chunk, *n);
                 push_op(chunk, OP_CONSTANT_F64);
                 push_op_u16(chunk, i);
+            }
+            Ast::Bool(a) => {
+                match a {
+                    true => push_op(chunk, OP_TRUE),
+                    false => push_op(chunk, OP_FALSE),
+                };
             }
             Ast::Negate(n) => {
                 n.codegen(chunk);
                 push_op(chunk, OP_NEGATE_F64);
+            }
+            Ast::Not(n) => {
+                n.codegen(chunk);
+                push_op(chunk, OP_NOT);
             }
             Ast::Multiply(l, r) => binary_op(chunk, l, r, OP_MULTIPLY_F64),
             Ast::Divide(l, r) => binary_op(chunk, l, r, OP_DIVIDE_F64),

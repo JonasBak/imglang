@@ -53,6 +53,12 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
         op @ OP_DIVIDE_F64 => print_simple(op, "OP_DIVIDE_F64"),
         op @ OP_ADD_F64 => print_simple(op, "OP_ADD_F64"),
         op @ OP_SUB_F64 => print_simple(op, "OP_SUB_F64"),
+        op @ OP_NIL => print_simple(op, "OP_NIL"),
+        op @ OP_TRUE => print_simple(op, "OP_TRUE"),
+        op @ OP_FALSE => print_simple(op, "OP_FALSE"),
+        op @ OP_POP_U8 => print_simple(op, "OP_POP_U8"),
+        op @ OP_POP_U64 => print_simple(op, "OP_POP_U64"),
+        op @ OP_NOT => print_simple(op, "OP_NOT"),
         op @ _ => print_simple(op, "?????"),
     }
 }

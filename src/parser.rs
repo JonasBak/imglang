@@ -8,6 +8,7 @@ pub enum Ast {
     Nil,
 
     Negate(Box<Ast>),
+    Not(Box<Ast>),
 
     Multiply(Box<Ast>, Box<Ast>),
     Divide(Box<Ast>, Box<Ast>),
@@ -51,6 +52,7 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::True => (Some(literal), None, PREC_NONE),
         TokenType::False => (Some(literal), None, PREC_NONE),
         TokenType::Nil => (Some(literal), None, PREC_NONE),
+        TokenType::Bang => (Some(unary), None, PREC_NONE),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -99,6 +101,7 @@ fn unary(lexer: &mut Lexer) -> Ast {
     let expr = parse_precedence(lexer, PREC_UNARY);
     match t {
         TokenType::Minus => Ast::Negate(Box::new(expr)),
+        TokenType::Bang => Ast::Not(Box::new(expr)),
         _ => todo!(),
     }
 }

@@ -17,7 +17,7 @@ use vm::*;
 
 fn main() {
     let mut chunk = Chunk::new();
-    let mut lexer = Lexer::new(&"-1+(1+1)*5-10/2".to_string()).unwrap();
+    let mut lexer = Lexer::new(&"!false".to_string()).unwrap();
     let ast = parse(&mut lexer);
     ast.codegen(&mut chunk);
     disassemble_chunk(&chunk);
