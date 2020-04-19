@@ -71,7 +71,7 @@ pub struct Lexer {
 impl Lexer {
     pub fn new(string: &String) -> LexerResult<Lexer> {
         Ok(Lexer {
-            tokens: parse_string(string)?,
+            tokens: scan(string)?,
             current: 0,
         })
     }
@@ -108,7 +108,7 @@ impl Lexer {
     }
 }
 
-pub fn parse_string(string: &String) -> LexerResult<Vec<Token>> {
+pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
     let mut tokens = vec![];
     let mut chars = string.chars().enumerate().peekable();
     loop {
