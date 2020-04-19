@@ -6,11 +6,11 @@ macro_rules! expr {
         $e
     };
 }
-macro_rules! binary_op{
+macro_rules! binary_op_f64{
     ($chunk:ident, $op:tt) => {{
-        let b = pop_f64(&mut $chunk);
-        let a = pop_f64(&mut $chunk);
-        push_f64(&mut $chunk, expr!(a $op b));
+        let r = pop_f64(&mut $chunk);
+        let l = pop_f64(&mut $chunk);
+        push_f64(&mut $chunk, expr!(l $op r));
     }}
 }
 
@@ -39,16 +39,26 @@ pub fn run_vm(mut chunk: Chunk) {
                 let a = pop_bool(&mut chunk);
                 push_bool(&mut chunk, !a);
             }
-            OP_MULTIPLY_F64 => binary_op!(chunk, *),
-            OP_DIVIDE_F64 => binary_op!(chunk, /),
-            OP_ADD_F64 => binary_op!(chunk, +),
-            OP_SUB_F64 => binary_op!(chunk, -),
+            OP_MULTIPLY_F64 => binary_op_f64!(chunk, *),
+            OP_DIVIDE_F64 => binary_op_f64!(chunk, /),
+            OP_ADD_F64 => binary_op_f64!(chunk, +),
+            OP_SUB_F64 => binary_op_f64!(chunk, -),
             OP_NIL => push_nil(&mut chunk),
             OP_TRUE => push_bool(&mut chunk, true),
             OP_FALSE => push_bool(&mut chunk, false),
             OP_POP_U8 => pop_nil(&mut chunk),
             OP_POP_U64 => {
                 pop_f64(&mut chunk);
+            }
+            OP_EQUAL_U8 => {
+                let r = pop_u8(&mut chunk);
+                let l = pop_u8(&mut chunk);
+                push_bool(&mut chunk, l == r);
+            }
+            OP_EQUAL_U64 => {
+                let r = pop_u64(&mut chunk);
+                let l = pop_u64(&mut chunk);
+                push_bool(&mut chunk, l == r);
             }
             a @ _ => {
                 println!("{:?}", a);

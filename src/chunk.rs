@@ -13,6 +13,8 @@ pub const OP_FALSE: u8 = 9;
 pub const OP_POP_U8: u8 = 10;
 pub const OP_POP_U64: u8 = 11;
 pub const OP_NOT: u8 = 12;
+pub const OP_EQUAL_U8: u8 = 13;
+pub const OP_EQUAL_U64: u8 = 14;
 
 pub struct Chunk {
     code: Vec<u8>,
@@ -95,6 +97,16 @@ pub fn push_f64(chunk: &mut Chunk, data: f64) {
 pub fn pop_f64(chunk: &mut Chunk) -> f64 {
     let l = chunk.stack.len() - 8;
     let v = f64::from_le_bytes(chunk.stack[l..].try_into().unwrap());
+    chunk.stack.truncate(l);
+    v
+}
+
+pub fn pop_u8(chunk: &mut Chunk) -> u8 {
+    chunk.stack.pop().unwrap()
+}
+pub fn pop_u64(chunk: &mut Chunk) -> u64 {
+    let l = chunk.stack.len() - 8;
+    let v = u64::from_le_bytes(chunk.stack[l..].try_into().unwrap());
     chunk.stack.truncate(l);
     v
 }

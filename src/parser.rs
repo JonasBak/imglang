@@ -10,10 +10,12 @@ pub enum Ast {
     Negate(Box<Ast>),
     Not(Box<Ast>),
 
-    Multiply(Box<Ast>, Box<Ast>),
-    Divide(Box<Ast>, Box<Ast>),
-    Add(Box<Ast>, Box<Ast>),
-    Sub(Box<Ast>, Box<Ast>),
+    Multiply(Box<Ast>, Box<Ast>, Option<AstType>),
+    Divide(Box<Ast>, Box<Ast>, Option<AstType>),
+    Add(Box<Ast>, Box<Ast>, Option<AstType>),
+    Sub(Box<Ast>, Box<Ast>, Option<AstType>),
+
+    Equal(Box<Ast>, Box<Ast>, Option<AstType>),
 }
 
 type Rule = (
@@ -53,6 +55,7 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::False => (Some(literal), None, PREC_NONE),
         TokenType::Nil => (Some(literal), None, PREC_NONE),
         TokenType::Bang => (Some(unary), None, PREC_NONE),
+        TokenType::EqualEqual => (None, Some(binary), PREC_EQUALITY),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -111,10 +114,11 @@ fn binary(lexer: &mut Lexer, lhs: Ast) -> Ast {
     let rule = get_rule(&t);
     let rhs = parse_precedence(lexer, rule.2 + 1);
     match t {
-        TokenType::Star => Ast::Multiply(Box::new(lhs), Box::new(rhs)),
-        TokenType::Slash => Ast::Divide(Box::new(lhs), Box::new(rhs)),
-        TokenType::Plus => Ast::Add(Box::new(lhs), Box::new(rhs)),
-        TokenType::Minus => Ast::Sub(Box::new(lhs), Box::new(rhs)),
+        TokenType::Star => Ast::Multiply(Box::new(lhs), Box::new(rhs), None),
+        TokenType::Slash => Ast::Divide(Box::new(lhs), Box::new(rhs), None),
+        TokenType::Plus => Ast::Add(Box::new(lhs), Box::new(rhs), None),
+        TokenType::Minus => Ast::Sub(Box::new(lhs), Box::new(rhs), None),
+        TokenType::EqualEqual => Ast::Equal(Box::new(lhs), Box::new(rhs), None),
         _ => todo!(),
     }
 }

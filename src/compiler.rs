@@ -32,10 +32,18 @@ impl Ast {
                 n.codegen(chunk);
                 push_op(chunk, OP_NOT);
             }
-            Ast::Multiply(l, r) => binary_op(chunk, l, r, OP_MULTIPLY_F64),
-            Ast::Divide(l, r) => binary_op(chunk, l, r, OP_DIVIDE_F64),
-            Ast::Add(l, r) => binary_op(chunk, l, r, OP_ADD_F64),
-            Ast::Sub(l, r) => binary_op(chunk, l, r, OP_SUB_F64),
+            Ast::Multiply(l, r, _) => binary_op(chunk, l, r, OP_MULTIPLY_F64),
+            Ast::Divide(l, r, _) => binary_op(chunk, l, r, OP_DIVIDE_F64),
+            Ast::Add(l, r, _) => binary_op(chunk, l, r, OP_ADD_F64),
+            Ast::Sub(l, r, _) => binary_op(chunk, l, r, OP_SUB_F64),
+            Ast::Equal(l, r, t) => {
+                l.codegen(chunk);
+                r.codegen(chunk);
+                match t.unwrap() {
+                    AstType::Nil | AstType::Bool => push_op(chunk, OP_EQUAL_U8),
+                    AstType::Float => push_op(chunk, OP_EQUAL_U64),
+                };
+            }
             _ => todo!(),
         }
     }

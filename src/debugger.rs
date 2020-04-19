@@ -59,6 +59,8 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
         op @ OP_POP_U8 => print_simple(op, "OP_POP_U8"),
         op @ OP_POP_U64 => print_simple(op, "OP_POP_U64"),
         op @ OP_NOT => print_simple(op, "OP_NOT"),
+        op @ OP_EQUAL_U8 => print_simple(op, "OP_EQUAL_U8"),
+        op @ OP_EQUAL_U64 => print_simple(op, "OP_EQUAL_U64"),
         op @ _ => print_simple(op, "?????"),
     }
 }
