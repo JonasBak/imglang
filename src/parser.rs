@@ -71,7 +71,7 @@ fn get_rule(t: &TokenType) -> Rule {
 }
 
 pub fn parse(lexer: &mut Lexer) -> Ast {
-    Ast::Program(Box::new(parse_precedence(lexer, PREC_NONE)))
+    Ast::Program(Box::new(parse_precedence(lexer, PREC_ASSIGNMENT)))
 }
 
 fn parse_precedence(lexer: &mut Lexer, prec: u32) -> Ast {
@@ -82,9 +82,7 @@ fn parse_precedence(lexer: &mut Lexer, prec: u32) -> Ast {
     let mut lhs = prefix_rule(lexer);
 
     while prec <= get_rule(&lexer.current_t()).2 {
-        if lexer.next().is_none() {
-            break;
-        }
+        lexer.next();
         let infix_rule = get_rule(&lexer.prev_t()).1.unwrap();
         lhs = infix_rule(lexer, lhs);
     }
