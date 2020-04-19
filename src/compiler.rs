@@ -24,6 +24,9 @@ impl Ast {
                     false => push_op(chunk, OP_FALSE),
                 };
             }
+            Ast::Nil => {
+                push_nil(chunk);
+            }
             Ast::Negate(n) => {
                 n.codegen(chunk);
                 push_op(chunk, OP_NEGATE_F64);
@@ -44,7 +47,49 @@ impl Ast {
                     AstType::Float => push_op(chunk, OP_EQUAL_U64),
                 };
             }
-            _ => todo!(),
+            Ast::NotEqual(l, r, t) => {
+                l.codegen(chunk);
+                r.codegen(chunk);
+                match t.unwrap() {
+                    AstType::Nil | AstType::Bool => push_op(chunk, OP_EQUAL_U8),
+                    AstType::Float => push_op(chunk, OP_EQUAL_U64),
+                };
+                push_op(chunk, OP_NOT);
+            }
+            Ast::Greater(l, r, t) => {
+                l.codegen(chunk);
+                r.codegen(chunk);
+                match t.unwrap() {
+                    AstType::Float => push_op(chunk, OP_GREATER_F64),
+                    _ => panic!(),
+                };
+            }
+            Ast::GreaterEqual(l, r, t) => {
+                r.codegen(chunk);
+                l.codegen(chunk);
+                match t.unwrap() {
+                    AstType::Float => push_op(chunk, OP_LESSER_F64),
+                    _ => panic!(),
+                };
+                push_op(chunk, OP_NOT);
+            }
+            Ast::Lesser(l, r, t) => {
+                l.codegen(chunk);
+                r.codegen(chunk);
+                match t.unwrap() {
+                    AstType::Float => push_op(chunk, OP_LESSER_F64),
+                    _ => panic!(),
+                };
+            }
+            Ast::LesserEqual(l, r, t) => {
+                r.codegen(chunk);
+                l.codegen(chunk);
+                match t.unwrap() {
+                    AstType::Float => push_op(chunk, OP_GREATER_F64),
+                    _ => panic!(),
+                };
+                push_op(chunk, OP_NOT);
+            }
         }
     }
 }

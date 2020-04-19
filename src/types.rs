@@ -38,7 +38,12 @@ impl Ast {
                 t.replace(t_r);
                 t_r
             }
-            Ast::Equal(l, r, t) => {
+            Ast::Equal(l, r, t)
+            | Ast::NotEqual(l, r, t)
+            | Ast::Greater(l, r, t)
+            | Ast::GreaterEqual(l, r, t)
+            | Ast::Lesser(l, r, t)
+            | Ast::LesserEqual(l, r, t) => {
                 let t_l = l.annotate_type()?;
                 let t_r = r.annotate_type()?;
                 if t_l != t_r {

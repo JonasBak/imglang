@@ -60,6 +60,16 @@ pub fn run_vm(mut chunk: Chunk) {
                 let l = pop_u64(&mut chunk);
                 push_bool(&mut chunk, l == r);
             }
+            OP_GREATER_F64 => {
+                let r = pop_f64(&mut chunk);
+                let l = pop_f64(&mut chunk);
+                push_bool(&mut chunk, l > r);
+            }
+            OP_LESSER_F64 => {
+                let r = pop_f64(&mut chunk);
+                let l = pop_f64(&mut chunk);
+                push_bool(&mut chunk, l < r);
+            }
             a @ _ => {
                 println!("{:?}", a);
                 todo!();

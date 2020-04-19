@@ -16,6 +16,11 @@ pub enum Ast {
     Sub(Box<Ast>, Box<Ast>, Option<AstType>),
 
     Equal(Box<Ast>, Box<Ast>, Option<AstType>),
+    NotEqual(Box<Ast>, Box<Ast>, Option<AstType>),
+    Greater(Box<Ast>, Box<Ast>, Option<AstType>),
+    GreaterEqual(Box<Ast>, Box<Ast>, Option<AstType>),
+    Lesser(Box<Ast>, Box<Ast>, Option<AstType>),
+    LesserEqual(Box<Ast>, Box<Ast>, Option<AstType>),
 }
 
 type Rule = (
@@ -56,6 +61,11 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::Nil => (Some(literal), None, PREC_NONE),
         TokenType::Bang => (Some(unary), None, PREC_NONE),
         TokenType::EqualEqual => (None, Some(binary), PREC_EQUALITY),
+        TokenType::BangEqual => (None, Some(binary), PREC_EQUALITY),
+        TokenType::Greater => (None, Some(binary), PREC_COMPARISON),
+        TokenType::GreaterEqual => (None, Some(binary), PREC_COMPARISON),
+        TokenType::Lesser => (None, Some(binary), PREC_COMPARISON),
+        TokenType::LesserEqual => (None, Some(binary), PREC_COMPARISON),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -119,6 +129,11 @@ fn binary(lexer: &mut Lexer, lhs: Ast) -> Ast {
         TokenType::Plus => Ast::Add(Box::new(lhs), Box::new(rhs), None),
         TokenType::Minus => Ast::Sub(Box::new(lhs), Box::new(rhs), None),
         TokenType::EqualEqual => Ast::Equal(Box::new(lhs), Box::new(rhs), None),
+        TokenType::BangEqual => Ast::NotEqual(Box::new(lhs), Box::new(rhs), None),
+        TokenType::Greater => Ast::Greater(Box::new(lhs), Box::new(rhs), None),
+        TokenType::GreaterEqual => Ast::GreaterEqual(Box::new(lhs), Box::new(rhs), None),
+        TokenType::Lesser => Ast::Lesser(Box::new(lhs), Box::new(rhs), None),
+        TokenType::LesserEqual => Ast::LesserEqual(Box::new(lhs), Box::new(rhs), None),
         _ => todo!(),
     }
 }
