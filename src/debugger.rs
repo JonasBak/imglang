@@ -19,32 +19,40 @@ pub fn print_lexer_err(source: &String, error: LexerError) {
 
 pub fn disassemble_chunk(chunk: &Chunk) {
     println!("{:*^64}", "BYTECODE");
-    for i in 0..chunk.len_code() / 4 {
-        let ip = i * 4;
+    let mut ip = 0;
+    while ip < chunk.len_code() {
         print!("{:0>6}\t", ip);
-        disassemble(get_op(&chunk, ip));
+        ip += disassemble(chunk, ip);
     }
     println!("{:*^64}", "DATA");
     for i in 0..chunk.len_data() / 8 {
         let p = i * 8;
-        println!("{:0>6}\t\t\t\tu64{: >24}", p, get_u64(&chunk, p as u8));
-        println!("\t\t\t\tf64{: >24}", get_f64(&chunk, p as u8));
+        println!("{:0>6}\t\t\t\tu64{: >24}", p, get_u64(&chunk, p as u16));
+        println!("\t\t\t\tf64{: >24}", get_f64(&chunk, p as u16));
     }
+    println!("{:*^64}", "");
 }
 
-pub fn disassemble(op: [u8; 4]) {
-    let op_code = match op[0] {
-        OP_RETURN => "OP_RETURN",
-        OP_CONSTANT_F64 => "OP_CONSTANT_F64",
-        OP_NEGATE_F64 => "OP_NEGATE_F64",
-        OP_MULTIPLY_F64 => "OP_MULTIPLY_F64",
-        OP_DIVIDE_F64 => "OP_DIVIDE_F64",
-        OP_ADD_F64 => "OP_ADD_F64",
-        OP_SUB_F64 => "OP_SUB_F64",
-        _ => "???",
-    };
-    println!(
-        "{: >3} {: <24}\t{: >3}\t{: >3}\t{: >3}",
-        op[0], op_code, op[1], op[2], op[3]
-    );
+fn print_simple(op: u8, op_string: &str) -> usize {
+    println!("{: >3} {: <24}", op, op_string);
+    1
+}
+fn print_unary(op: u8, op_string: &str, operand: u64) {
+    println!("{: >3} {: <24}\t{: >8}", op, op_string, operand);
+}
+
+pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
+    match get_op(chunk, ip) {
+        op @ OP_RETURN => print_simple(op, "OP_RETURN"),
+        op @ OP_CONSTANT_F64 => {
+            print_unary(op, "OP_CONSTANT_F64", get_op(chunk, ip + 1) as u64);
+            3
+        }
+        op @ OP_NEGATE_F64 => print_simple(op, "OP_NEGATE_F64"),
+        op @ OP_MULTIPLY_F64 => print_simple(op, "OP_MULTIPLY_F64"),
+        op @ OP_DIVIDE_F64 => print_simple(op, "OP_DIVIDE_F64"),
+        op @ OP_ADD_F64 => print_simple(op, "OP_ADD_F64"),
+        op @ OP_SUB_F64 => print_simple(op, "OP_SUB_F64"),
+        op @ _ => print_simple(op, "?????"),
+    }
 }

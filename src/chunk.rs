@@ -37,35 +37,48 @@ impl Chunk {
 
 // add opcode, returns index useful for jumps
 // called by compiler
-pub fn add_op(chunk: &mut Chunk, op: [u8; 4]) -> usize {
-    chunk.code.extend_from_slice(&op);
+pub fn push_op(chunk: &mut Chunk, op: u8) -> usize {
+    chunk.code.push(op);
+    chunk.code.len() - 1
+}
+pub fn push_op_u16(chunk: &mut Chunk, op: u16) -> usize {
+    chunk.code.extend_from_slice(&op.to_le_bytes());
+    chunk.code.len() - 2
+}
+pub fn push_op_u32(chunk: &mut Chunk, op: u32) -> usize {
+    chunk.code.extend_from_slice(&op.to_le_bytes());
     chunk.code.len() - 4
 }
 
 // get opcode pointed at by ip
 // called by vm
-pub fn get_op(chunk: &Chunk, ip: usize) -> [u8; 4] {
-    chunk.code[ip..ip + 4].try_into().unwrap()
+pub fn get_op(chunk: &Chunk, ip: usize) -> u8 {
+    chunk.code[ip]
+}
+pub fn get_op_u16(chunk: &Chunk, ip: usize) -> u16 {
+    u16::from_le_bytes(chunk.code[ip..ip + 2].try_into().unwrap())
+}
+pub fn get_op_u32(chunk: &Chunk, ip: usize) -> u32 {
+    u32::from_le_bytes(chunk.code[ip..ip + 4].try_into().unwrap())
 }
 
 // add value to constants array, returns index used
 // to load value with constant opcodes
 // called by compiler
 
-pub fn add_f64(chunk: &mut Chunk, data: f64) -> u8 {
+pub fn add_f64(chunk: &mut Chunk, data: f64) -> u16 {
     chunk.data.extend_from_slice(&data.to_le_bytes());
-    (chunk.data.len() - 8) as u8
+    (chunk.data.len() - 8) as u16
 }
 
 // get value from index in constants array
 // called by vm
 
-pub fn get_f64(chunk: &Chunk, i: u8) -> f64 {
+pub fn get_f64(chunk: &Chunk, i: u16) -> f64 {
     let i = i as usize;
     f64::from_le_bytes(chunk.data[i..i + 8].try_into().unwrap())
 }
-
-pub fn get_u64(chunk: &Chunk, i: u8) -> u64 {
+pub fn get_u64(chunk: &Chunk, i: u16) -> u64 {
     let i = i as usize;
     u64::from_le_bytes(chunk.data[i..i + 8].try_into().unwrap())
 }

@@ -3,7 +3,7 @@ use super::*;
 fn binary_op(chunk: &mut Chunk, l: &Ast, r: &Ast, op: u8) {
     l.codegen(chunk);
     r.codegen(chunk);
-    add_op(chunk, [op, 0, 0, 0]);
+    push_op(chunk, op);
 }
 
 impl Ast {
@@ -11,15 +11,16 @@ impl Ast {
         match self {
             Ast::Program(expr) => {
                 expr.codegen(chunk);
-                add_op(chunk, [OP_RETURN, 0, 0, 0]);
+                push_op(chunk, OP_RETURN);
             }
             Ast::Float(n) => {
                 let i = add_f64(chunk, *n);
-                add_op(chunk, [OP_CONSTANT_F64, i, 0, 0]);
+                push_op(chunk, OP_CONSTANT_F64);
+                push_op_u16(chunk, i);
             }
             Ast::Negate(n) => {
                 n.codegen(chunk);
-                add_op(chunk, [OP_NEGATE_F64, 0, 0, 0]);
+                push_op(chunk, OP_NEGATE_F64);
             }
             Ast::Multiply(l, r) => binary_op(chunk, l, r, OP_MULTIPLY_F64),
             Ast::Divide(l, r) => binary_op(chunk, l, r, OP_DIVIDE_F64),
