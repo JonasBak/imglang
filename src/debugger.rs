@@ -1,17 +1,5 @@
 use super::*;
 
-pub fn print_parser_err(source: &String, error: ParserError) {
-    let mut source = source.clone();
-    if let ParserError::UnexpectedToken(token) = error {
-        source.insert_str(token.end, "<<<");
-        source.insert_str(token.start, ">>>");
-        println!("{}", source);
-        println!("Error: Unexpected token {:?}", token.t);
-    } else {
-        println!("Error: {:?}", error);
-    }
-}
-
 pub fn print_lexer_err(source: &String, error: LexerError) {
     let mut source = source.clone();
     match error {
@@ -46,13 +34,13 @@ pub fn disassemble_chunk(chunk: &Chunk) {
 
 pub fn disassemble(op: [u8; 4]) {
     let op_code = match op[0] {
-        OP_RETURN => "RETURN",
-        OP_CONSTANT_I64 => "CONSTANT_I64",
-        OP_CONSTANT_F64 => "CONSTANT_F64",
-        OP_ADD_F64 => "ADD_F64",
-        OP_ADD_I64 => "ADD_I64",
-        OP_SUB_F64 => "SUB_F64",
-        OP_SUB_I64 => "SUB_I64",
+        OP_RETURN => "OP_RETURN",
+        OP_CONSTANT_F64 => "OP_CONSTANT_F64",
+        OP_NEGATE_F64 => "OP_NEGATE_F64",
+        OP_MULTIPLY_F64 => "OP_MULTIPLY_F64",
+        OP_DIVIDE_F64 => "OP_DIVIDE_F64",
+        OP_ADD_F64 => "OP_ADD_F64",
+        OP_SUB_F64 => "OP_SUB_F64",
         _ => "???",
     };
     println!(

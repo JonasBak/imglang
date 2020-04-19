@@ -1,11 +1,11 @@
 use std::convert::TryInto;
 
 pub const OP_RETURN: u8 = 0;
-pub const OP_CONSTANT_I64: u8 = 1;
-pub const OP_CONSTANT_F64: u8 = 2;
-pub const OP_ADD_I64: u8 = 3;
-pub const OP_ADD_F64: u8 = 4;
-pub const OP_SUB_I64: u8 = 5;
+pub const OP_CONSTANT_F64: u8 = 1;
+pub const OP_NEGATE_F64: u8 = 2;
+pub const OP_MULTIPLY_F64: u8 = 3;
+pub const OP_DIVIDE_F64: u8 = 4;
+pub const OP_ADD_F64: u8 = 5;
 pub const OP_SUB_F64: u8 = 6;
 
 pub struct Chunk {

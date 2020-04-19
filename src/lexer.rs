@@ -33,7 +33,7 @@ pub enum TokenType {
     // Literals
     Identifier(String),
     String(String),
-    Number(f64),
+    Float(f64),
 
     // Keywords
     And,
@@ -61,6 +61,51 @@ pub struct Token {
     pub start: usize,
     pub end: usize,
     pub t: TokenType,
+}
+
+pub struct Lexer {
+    tokens: Vec<Token>,
+    current: usize,
+}
+
+impl Lexer {
+    pub fn new(string: &String) -> LexerResult<Lexer> {
+        Ok(Lexer {
+            tokens: parse_string(string)?,
+            current: 0,
+        })
+    }
+    pub fn prev(&self) -> Token {
+        self.tokens[0.max(self.current - 1)].clone()
+    }
+    pub fn prev_t(&self) -> TokenType {
+        self.prev().t
+    }
+    pub fn current_t(&self) -> TokenType {
+        self.tokens[self.current].t.clone()
+    }
+    pub fn peek_t(&self) -> &TokenType {
+        if self.current + 1 >= self.tokens.len() {
+            return &TokenType::Eof;
+        }
+        &self.tokens[self.current + 1].t
+    }
+    pub fn next(&mut self) -> Option<Token> {
+        if self.current + 1 >= self.tokens.len() {
+            return None;
+        }
+        self.current += 1;
+        Some(self.tokens[self.current].clone())
+    }
+    pub fn next_t(&mut self) -> TokenType {
+        self.next().map(|t| t.t).unwrap_or(TokenType::Eof)
+    }
+    pub fn next_if(&mut self, p: &dyn Fn(&TokenType) -> bool) -> Option<TokenType> {
+        if p(self.peek_t()) {
+            return Some(self.next_t());
+        }
+        None
+    }
 }
 
 pub fn parse_string(string: &String) -> LexerResult<Vec<Token>> {
@@ -165,7 +210,7 @@ pub fn parse_string(string: &String) -> LexerResult<Vec<Token>> {
                 (
                     i,
                     i + literal.len(),
-                    TokenType::Number(
+                    TokenType::Float(
                         literal
                             .into_iter()
                             .collect::<String>()

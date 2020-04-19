@@ -1,411 +1,111 @@
 use super::*;
-use std::iter::Peekable;
 
-trait TokenIterator<'a>: Iterator<Item = &'a Token> {
-    fn peek(&mut self) -> Option<&'a Token>;
-    fn peek_t(&mut self) -> Option<&'a TokenType> {
-        self.peek().map(|t| &t.t)
-    }
-    fn next_t(&mut self) -> Option<&'a TokenType> {
-        self.next().map(|t| &t.t)
-    }
-    fn check(&mut self, p: &dyn Fn(&TokenType) -> bool) -> bool {
-        self.peek_t().map(|t| p(t)).unwrap_or(false)
-    }
-    fn unexpected(&mut self) -> ParserError {
-        match self.next() {
-            Some(token) => ParserError::UnexpectedToken(token.clone()),
-            None => ParserError::TODO,
-        }
-    }
-    fn next_if(&mut self, p: &dyn Fn(&TokenType) -> bool) -> bool {
-        if self.peek_t().map(|t| p(t)).unwrap_or(false) {
-            self.next();
-            return true;
-        }
-        false
-    }
-}
-
-fn map_when<T>(
-    tokens: &mut dyn TokenIterator,
-    ped: &dyn Fn(&TokenType) -> Option<T>,
-) -> ParserResult<T>
-where
-    T: Clone,
-{
-    match tokens.peek_t().map(|t| ped(t)).flatten() {
-        Some(i) => {
-            tokens.next();
-            Ok(i.clone())
-        }
-        _ => return Err(tokens.unexpected()),
-    }
-}
-
-fn expect(tokens: &mut dyn TokenIterator, p: &dyn Fn(&TokenType) -> bool) -> ParserResult<()> {
-    if tokens.peek_t().map(|t| p(t)).unwrap_or(false) {
-        tokens.next();
-        return Ok(());
-    }
-    Err(tokens.unexpected())
-}
-
-impl<'a, I> TokenIterator<'a> for Peekable<I>
-where
-    I: Iterator<Item = &'a Token>,
-{
-    fn peek(&mut self) -> Option<&'a Token> {
-        self.peek().map(|t| *t)
-    }
-}
-
-pub type ParserResult<T> = Result<T, ParserError>;
-
-#[derive(Debug, PartialEq)]
-pub enum ParserError {
-    UnexpectedToken(Token),
-    TODO,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Ast {
-    // Misc
-    Program(Vec<Box<Ast>>),
-    Decl(String, Box<Ast>),
-    Assign(String, Box<Ast>),
-    Print(Box<Ast>),
-    Block(Vec<Box<Ast>>),
-    Call(String, Vec<Box<Ast>>),
-    Function(String, Vec<String>, Box<Ast>),
-    Return(Option<Box<Ast>>),
-    While {
-        condition: Box<Ast>,
-        body: Box<Ast>,
-    },
-    If {
-        condition: Box<Ast>,
-        if_true: Box<Ast>,
-        if_false: Option<Box<Ast>>,
-    },
+    Program(Box<Ast>),
 
-    // primary
-    Number(f64),
-    String(String),
-    Bool(bool),
-    Nil,
-    Identifier(String),
+    Float(f64),
+    Negate(Box<Ast>),
 
-    // unary
-    Bang(Box<Ast>),
-    Negated(Box<Ast>),
-
-    // binary
-    Mul(Box<Ast>, Box<Ast>),
-    Div(Box<Ast>, Box<Ast>),
-
+    Multiply(Box<Ast>, Box<Ast>),
+    Divide(Box<Ast>, Box<Ast>),
     Add(Box<Ast>, Box<Ast>),
     Sub(Box<Ast>, Box<Ast>),
-
-    G(Box<Ast>, Box<Ast>),
-    GE(Box<Ast>, Box<Ast>),
-    L(Box<Ast>, Box<Ast>),
-    LE(Box<Ast>, Box<Ast>),
-
-    Eq(Box<Ast>, Box<Ast>),
-    NotEq(Box<Ast>, Box<Ast>),
-
-    And(Box<Ast>, Box<Ast>),
-    Or(Box<Ast>, Box<Ast>),
 }
 
-pub fn parse_program(tokens: Vec<Token>) -> ParserResult<Box<Ast>> {
-    let mut tokens = tokens.iter().peekable();
-    let mut prog = vec![];
-    while !tokens.check(&|t| t == &TokenType::Eof) {
-        prog.push(parse_declaration(&mut tokens)?);
+type Rule = (
+    Option<fn(&mut Lexer) -> Ast>,
+    Option<fn(&mut Lexer, Ast) -> Ast>,
+    u32,
+);
+
+pub const PREC_NONE: u32 = 0;
+pub const PREC_ASSIGNMENT: u32 = 10; // =
+pub const PREC_OR: u32 = 20; // or
+pub const PREC_AND: u32 = 30; // and
+pub const PREC_EQUALITY: u32 = 40; // == !=
+pub const PREC_COMPARISON: u32 = 50; // < > <= >=
+pub const PREC_TERM: u32 = 60; // + -
+pub const PREC_FACTOR: u32 = 70; // * /
+pub const PREC_UNARY: u32 = 80; // ! -
+pub const PREC_CALL: u32 = 90; // . ()
+pub const PREC_PRIMARY: u32 = 100;
+
+fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool) {
+    if !p(&lexer.current_t()) {
+        todo!();
     }
-    expect(&mut tokens, &|t| t == &TokenType::Eof)?;
-    Ok(Box::new(Ast::Program(prog)))
+    lexer.next();
 }
 
-fn parse_primary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    match tokens.peek_t() {
-        Some(TokenType::Number(n)) => {
-            tokens.next();
-            Ok(Box::new(Ast::Number(*n)))
-        }
-        Some(TokenType::String(string)) => {
-            tokens.next();
-            Ok(Box::new(Ast::String(string.clone())))
-        }
-        Some(TokenType::False) => {
-            tokens.next();
-            Ok(Box::new(Ast::Bool(false)))
-        }
-        Some(TokenType::True) => {
-            tokens.next();
-            Ok(Box::new(Ast::Bool(true)))
-        }
-        Some(TokenType::Nil) => {
-            tokens.next();
-            Ok(Box::new(Ast::Nil))
-        }
-        Some(TokenType::Identifier(s)) => {
-            tokens.next();
-            Ok(Box::new(Ast::Identifier(s.clone())))
-        }
-        Some(TokenType::LeftPar) => {
-            tokens.next();
-            let node = parse_expression(tokens)?;
-            expect(tokens, &|t| t == &TokenType::RightPar)?;
-            Ok(node)
-        }
-        _ => Err(tokens.unexpected()),
+fn get_rule(t: &TokenType) -> Rule {
+    match t {
+        TokenType::LeftPar => (Some(grouping), None, PREC_NONE),
+        TokenType::Float(_) => (Some(float), None, PREC_NONE),
+        TokenType::Star => (None, Some(binary), PREC_FACTOR),
+        TokenType::Slash => (None, Some(binary), PREC_FACTOR),
+        TokenType::Plus => (None, Some(binary), PREC_TERM),
+        TokenType::Minus => (Some(unary), Some(binary), PREC_TERM),
+        _ => (None, None, PREC_NONE),
     }
 }
 
-fn parse_call(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let left = parse_primary(tokens)?;
+pub fn parse(lexer: &mut Lexer) -> Ast {
+    Ast::Program(Box::new(parse_precedence(lexer, PREC_NONE)))
+}
 
-    match tokens.peek_t() {
-        Some(TokenType::LeftPar) => match *left {
-            Ast::Identifier(identifier) => {
-                tokens.next();
-                let mut args = vec![];
-                if !tokens.check(&|t| t == &TokenType::RightPar) {
-                    while {
-                        args.push(parse_expression(tokens)?);
-                        tokens.next_if(&|t| t == &TokenType::Comma)
-                    } {}
-                }
-                expect(tokens, &|t| t == &TokenType::RightPar)?;
-                Ok(Box::new(Ast::Call(identifier, args)))
-            }
-            _ => Err(tokens.unexpected()),
-        },
-        _ => Ok(left),
+fn parse_precedence(lexer: &mut Lexer, prec: u32) -> Ast {
+    lexer.next().unwrap();
+
+    let prefix_rule = get_rule(&lexer.prev_t()).0.unwrap();
+
+    let mut lhs = prefix_rule(lexer);
+
+    while prec <= get_rule(&lexer.current_t()).2 {
+        if lexer.next().is_none() {
+            break;
+        }
+        let infix_rule = get_rule(&lexer.prev_t()).1.unwrap();
+        lhs = infix_rule(lexer, lhs);
+    }
+
+    lhs
+}
+
+fn float(lexer: &mut Lexer) -> Ast {
+    match lexer.prev_t() {
+        TokenType::Float(f) => Ast::Float(f),
+        _ => todo!(),
     }
 }
 
-fn parse_unary(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let unary = match tokens.peek_t() {
-        Some(TokenType::Bang) => {
-            tokens.next();
-            Box::new(Ast::Bang(parse_unary(tokens)?))
-        }
-        Some(TokenType::Minus) => {
-            tokens.next();
-            Box::new(Ast::Negated(parse_unary(tokens)?))
-        }
-        _ => parse_call(tokens)?,
-    };
-    Ok(unary)
+fn expression(lexer: &mut Lexer) -> Ast {
+    parse_precedence(lexer, PREC_ASSIGNMENT)
 }
 
-fn parse_multiplication(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let mut mul = parse_unary(tokens)?;
-
-    while tokens.check(&|t| match t {
-        TokenType::Slash | TokenType::Star => true,
-        _ => false,
-    }) {
-        mul = match tokens.next().unwrap().t {
-            TokenType::Star => Box::new(Ast::Mul(mul, parse_unary(tokens)?)),
-            TokenType::Slash => Box::new(Ast::Div(mul, parse_unary(tokens)?)),
-            _ => panic!(),
-        }
-    }
-    Ok(mul)
-}
-
-fn parse_addition(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let mut add = parse_multiplication(tokens)?;
-
-    while tokens.check(&|t| match t {
-        TokenType::Minus | TokenType::Plus => true,
-        _ => false,
-    }) {
-        add = match tokens.next().unwrap().t {
-            TokenType::Plus => Box::new(Ast::Add(add, parse_multiplication(tokens)?)),
-            TokenType::Minus => Box::new(Ast::Sub(add, parse_multiplication(tokens)?)),
-            _ => panic!(),
-        }
-    }
-    Ok(add)
-}
-
-fn parse_comparison(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let mut com = parse_addition(tokens)?;
-
-    while tokens.check(&|t| match t {
-        TokenType::Greater
-        | TokenType::GreaterEqual
-        | TokenType::Lesser
-        | TokenType::LesserEqual => true,
-        _ => false,
-    }) {
-        com = match tokens.next().unwrap().t {
-            TokenType::Greater => Box::new(Ast::G(com, parse_addition(tokens)?)),
-            TokenType::GreaterEqual => Box::new(Ast::GE(com, parse_addition(tokens)?)),
-            TokenType::Lesser => Box::new(Ast::L(com, parse_addition(tokens)?)),
-            TokenType::LesserEqual => Box::new(Ast::LE(com, parse_addition(tokens)?)),
-            _ => panic!(),
-        }
-    }
-    Ok(com)
-}
-
-fn parse_equality(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let mut eq = parse_comparison(tokens)?;
-
-    while tokens.check(&|t| match t {
-        TokenType::BangEqual | TokenType::EqualEqual => true,
-        _ => false,
-    }) {
-        eq = match tokens.next().unwrap().t {
-            TokenType::EqualEqual => Box::new(Ast::Eq(eq, parse_comparison(tokens)?)),
-            TokenType::BangEqual => Box::new(Ast::NotEq(eq, parse_comparison(tokens)?)),
-            _ => panic!(),
-        }
-    }
-    Ok(eq)
-}
-
-fn parse_and(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let mut left = parse_equality(tokens)?;
-
-    while tokens.next_if(&|t| t == &TokenType::And) {
-        left = Box::new(Ast::And(left, parse_and(tokens)?));
-    }
-    Ok(left)
-}
-
-fn parse_or(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let mut left = parse_and(tokens)?;
-
-    while tokens.next_if(&|t| t == &TokenType::Or) {
-        left = Box::new(Ast::Or(left, parse_and(tokens)?));
-    }
-    Ok(left)
-}
-
-fn parse_assignment(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    let left = parse_or(tokens)?;
-    match tokens.peek_t() {
-        Some(TokenType::Equal) => match *left {
-            Ast::Identifier(identifier) => {
-                tokens.next();
-                let value = parse_assignment(tokens)?;
-                Ok(Box::new(Ast::Assign(identifier, value)))
-            }
-            _ => Err(tokens.unexpected()),
-        },
-        _ => Ok(left),
+fn unary(lexer: &mut Lexer) -> Ast {
+    let t = lexer.prev_t();
+    let expr = parse_precedence(lexer, PREC_UNARY);
+    match t {
+        TokenType::Minus => Ast::Negate(Box::new(expr)),
+        _ => todo!(),
     }
 }
 
-fn parse_expression(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    parse_assignment(tokens)
-}
-
-fn parse_block(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    expect(tokens, &|t| t == &TokenType::LeftBrace)?;
-    let mut block = vec![];
-    while !tokens.check(&|t| t == &TokenType::RightBrace) {
-        block.push(parse_declaration(tokens)?);
-    }
-    expect(tokens, &|t| t == &TokenType::RightBrace)?;
-    Ok(Box::new(Ast::Block(block)))
-}
-
-fn parse_statement(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    match tokens.peek_t() {
-        Some(TokenType::Print) => {
-            tokens.next();
-            let print = parse_expression(tokens)?;
-            expect(tokens, &|t| t == &TokenType::Semicolon)?;
-            Ok(Box::new(Ast::Print(print)))
-        }
-        Some(TokenType::LeftBrace) => parse_block(tokens),
-        Some(TokenType::While) => {
-            tokens.next();
-            expect(tokens, &|t| t == &TokenType::LeftPar)?;
-            let condition = parse_expression(tokens)?;
-            expect(tokens, &|t| t == &TokenType::RightPar)?;
-            let body = parse_statement(tokens)?;
-            Ok(Box::new(Ast::While { condition, body }))
-        }
-        Some(TokenType::If) => {
-            tokens.next();
-            expect(tokens, &|t| t == &TokenType::LeftPar)?;
-            let condition = parse_expression(tokens)?;
-            expect(tokens, &|t| t == &TokenType::RightPar)?;
-            let if_true = parse_statement(tokens)?;
-            let if_false = if tokens.next_if(&|t| t == &TokenType::Else) {
-                Some(parse_statement(tokens)?)
-            } else {
-                None
-            };
-            Ok(Box::new(Ast::If {
-                condition,
-                if_true,
-                if_false,
-            }))
-        }
-        Some(TokenType::Return) => {
-            tokens.next();
-            let expr = if !tokens.check(&|t| t == &TokenType::Semicolon) {
-                Some(parse_expression(tokens)?)
-            } else {
-                None
-            };
-            expect(tokens, &|t| t == &TokenType::Semicolon)?;
-            Ok(Box::new(Ast::Return(expr)))
-        }
-        _ => {
-            let stmt = parse_expression(tokens)?;
-            expect(tokens, &|t| t == &TokenType::Semicolon)?;
-            Ok(stmt)
-        }
+fn binary(lexer: &mut Lexer, lhs: Ast) -> Ast {
+    let t = lexer.prev_t();
+    let rule = get_rule(&t);
+    let rhs = parse_precedence(lexer, rule.2 + 1);
+    match t {
+        TokenType::Star => Ast::Multiply(Box::new(lhs), Box::new(rhs)),
+        TokenType::Slash => Ast::Divide(Box::new(lhs), Box::new(rhs)),
+        TokenType::Plus => Ast::Add(Box::new(lhs), Box::new(rhs)),
+        TokenType::Minus => Ast::Sub(Box::new(lhs), Box::new(rhs)),
+        _ => todo!(),
     }
 }
 
-fn parse_declaration(tokens: &mut dyn TokenIterator) -> ParserResult<Box<Ast>> {
-    match tokens.peek_t() {
-        Some(TokenType::Var) => {
-            tokens.next();
-            let identifier = map_when(tokens, &|t| match t {
-                TokenType::Identifier(s) => Some(s.clone()),
-                _ => None,
-            })?;
-            expect(tokens, &|t| t == &TokenType::Equal)?;
-            let expr = parse_expression(tokens)?;
-            expect(tokens, &|t| t == &TokenType::Semicolon)?;
-            Ok(Box::new(Ast::Decl(identifier, expr)))
-        }
-        Some(TokenType::Fun) => {
-            tokens.next();
-            let identifier = map_when(tokens, &|t| match t {
-                TokenType::Identifier(s) => Some(s.clone()),
-                _ => None,
-            })?;
-            expect(tokens, &|t| t == &TokenType::LeftPar)?;
-            let mut args = vec![];
-            if !tokens.check(&|t| t == &TokenType::RightPar) {
-                while {
-                    let arg = map_when(tokens, &|t| match t {
-                        TokenType::Identifier(s) => Some(s.clone()),
-                        _ => None,
-                    })?;
-                    args.push(arg);
-                    tokens.next_if(&|t| t == &TokenType::Comma)
-                } {}
-            }
-            expect(tokens, &|t| t == &TokenType::RightPar)?;
-            let block = parse_block(tokens)?;
-            Ok(Box::new(Ast::Function(identifier, args, block)))
-        }
-        _ => parse_statement(tokens),
-    }
+fn grouping(lexer: &mut Lexer) -> Ast {
+    let expr = expression(lexer);
+    consume(lexer, |t| t == &TokenType::RightPar);
+    expr
 }
