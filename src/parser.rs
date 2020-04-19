@@ -4,6 +4,9 @@ pub enum Ast {
     Program(Box<Ast>),
 
     Float(f64),
+    Bool(bool),
+    Nil,
+
     Negate(Box<Ast>),
 
     Multiply(Box<Ast>, Box<Ast>),
@@ -40,11 +43,14 @@ fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool) {
 fn get_rule(t: &TokenType) -> Rule {
     match t {
         TokenType::LeftPar => (Some(grouping), None, PREC_NONE),
-        TokenType::Float(_) => (Some(float), None, PREC_NONE),
+        TokenType::Float(_) => (Some(literal), None, PREC_NONE),
         TokenType::Star => (None, Some(binary), PREC_FACTOR),
         TokenType::Slash => (None, Some(binary), PREC_FACTOR),
         TokenType::Plus => (None, Some(binary), PREC_TERM),
         TokenType::Minus => (Some(unary), Some(binary), PREC_TERM),
+        TokenType::True => (Some(literal), None, PREC_NONE),
+        TokenType::False => (Some(literal), None, PREC_NONE),
+        TokenType::Nil => (Some(literal), None, PREC_NONE),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -71,10 +77,16 @@ fn parse_precedence(lexer: &mut Lexer, prec: u32) -> Ast {
     lhs
 }
 
-fn float(lexer: &mut Lexer) -> Ast {
+fn literal(lexer: &mut Lexer) -> Ast {
     match lexer.prev_t() {
         TokenType::Float(f) => Ast::Float(f),
-        _ => todo!(),
+        TokenType::True => Ast::Bool(true),
+        TokenType::False => Ast::Bool(false),
+        TokenType::Nil => Ast::Nil,
+        _ => todo!(
+            "parsing literal of type {:?} not implemented",
+            lexer.prev_t()
+        ),
     }
 }
 
