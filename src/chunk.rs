@@ -35,6 +35,8 @@ generate_opcodes!(
     LesserF64,
     PrintF64,
     PrintBool,
+    VariableU8,
+    VariableU64,
 );
 
 pub struct Chunk {
@@ -109,7 +111,7 @@ pub fn get_u64(chunk: &Chunk, i: u16) -> u64 {
     u64::from_le_bytes(chunk.data[i..i + 8].try_into().unwrap())
 }
 
-// push/pop value to/from stack
+// peek/push/pop value to/from stack
 // called by vm
 
 pub fn push_f64(chunk: &mut Chunk, data: f64) {
@@ -122,8 +124,21 @@ pub fn pop_f64(chunk: &mut Chunk) -> f64 {
     v
 }
 
+pub fn peek_u8(chunk: &mut Chunk, i: usize) -> u8 {
+    chunk.stack[i]
+}
+pub fn push_u8(chunk: &mut Chunk, data: u8) {
+    chunk.stack.push(data);
+}
 pub fn pop_u8(chunk: &mut Chunk) -> u8 {
     chunk.stack.pop().unwrap()
+}
+
+pub fn peek_u64(chunk: &mut Chunk, i: usize) -> u64 {
+    u64::from_le_bytes(chunk.stack[i..i + 8].try_into().unwrap())
+}
+pub fn push_u64(chunk: &mut Chunk, data: u64) {
+    chunk.stack.extend_from_slice(&data.to_le_bytes());
 }
 pub fn pop_u64(chunk: &mut Chunk) -> u64 {
     let l = chunk.stack.len() - 8;

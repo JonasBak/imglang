@@ -1,8 +1,13 @@
 use super::*;
 
+#[derive(Debug)]
 pub enum Ast {
     Program(Vec<Ast>),
+    Block(Vec<Ast>),
     Print(Box<Ast>, Option<AstType>),
+
+    Declaration(String, Box<Ast>, Option<AstType>),
+    Variable(String, Option<AstType>),
 
     ExprStatement(Box<Ast>, Option<AstType>),
 
@@ -69,6 +74,7 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::GreaterEqual => (None, Some(binary), PREC_COMPARISON),
         TokenType::Lesser => (None, Some(binary), PREC_COMPARISON),
         TokenType::LesserEqual => (None, Some(binary), PREC_COMPARISON),
+        TokenType::Identifier(_) => (Some(variable), None, PREC_NONE),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -150,7 +156,45 @@ fn grouping(lexer: &mut Lexer) -> Ast {
 }
 
 fn declaration(lexer: &mut Lexer) -> Ast {
-    statement(lexer)
+    match lexer.current_t() {
+        TokenType::Var => {
+            lexer.next();
+            var_declaration(lexer)
+        }
+        _ => statement(lexer),
+    }
+}
+
+fn var_declaration(lexer: &mut Lexer) -> Ast {
+    let name = parse_variable(lexer);
+
+    consume(lexer, |t| t == &TokenType::Equal);
+    let expr = expression(lexer);
+
+    consume(lexer, |t| t == &TokenType::Semicolon);
+
+    Ast::Declaration(name, Box::new(expr), None)
+}
+
+fn parse_variable(lexer: &mut Lexer) -> String {
+    match lexer.current_t() {
+        TokenType::Identifier(s) => {
+            lexer.next();
+            s
+        }
+        _ => todo!(),
+    }
+}
+
+fn variable(lexer: &mut Lexer) -> Ast {
+    named_variable(lexer.prev_t().unwrap())
+}
+
+fn named_variable(name: TokenType) -> Ast {
+    match name {
+        TokenType::Identifier(name) => Ast::Variable(name, None),
+        _ => todo!(),
+    }
 }
 
 fn statement(lexer: &mut Lexer) -> Ast {
@@ -158,6 +202,10 @@ fn statement(lexer: &mut Lexer) -> Ast {
         TokenType::Print => {
             lexer.next();
             print_statement(lexer)
+        }
+        TokenType::LeftBrace => {
+            lexer.next();
+            block(lexer)
         }
         _ => expression_statement(lexer),
     }
@@ -167,6 +215,15 @@ fn print_statement(lexer: &mut Lexer) -> Ast {
     let expr = expression(lexer);
     consume(lexer, |t| t == &TokenType::Semicolon);
     Ast::Print(Box::new(expr), None)
+}
+
+fn block(lexer: &mut Lexer) -> Ast {
+    let mut parsed = vec![];
+    while lexer.current_t() != TokenType::RightBrace {
+        parsed.push(declaration(lexer));
+    }
+    consume(lexer, |t| t == &TokenType::RightBrace);
+    Ast::Block(parsed)
 }
 
 fn expression_statement(lexer: &mut Lexer) -> Ast {

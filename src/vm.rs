@@ -17,7 +17,7 @@ macro_rules! binary_op_f64{
 pub fn run_vm(mut chunk: Chunk) {
     let mut ip = 0;
     loop {
-        print!("{:0>6}\t", ip);
+        print!("{:0>6}\tstack: {: >6}\t", ip, chunk.len_stack());
         disassemble(&chunk, ip);
         ip = ip + 1;
         match OpCode::from(get_op(&chunk, ip - 1)) {
@@ -76,6 +76,18 @@ pub fn run_vm(mut chunk: Chunk) {
                 let r = pop_f64(&mut chunk);
                 let l = pop_f64(&mut chunk);
                 push_bool(&mut chunk, l < r);
+            }
+            OpCode::VariableU8 => {
+                let i = get_op_u16(&mut chunk, ip);
+                ip += 2;
+                let v = peek_u8(&mut chunk, i as usize);
+                push_u8(&mut chunk, v);
+            }
+            OpCode::VariableU64 => {
+                let i = get_op_u16(&mut chunk, ip);
+                ip += 2;
+                let v = peek_u64(&mut chunk, i as usize);
+                push_u64(&mut chunk, v);
             }
         }
     }

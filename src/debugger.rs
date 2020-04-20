@@ -72,5 +72,13 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
         op @ OpCode::LesserF64 => print_simple(op),
         op @ OpCode::PrintF64 => print_simple(op),
         op @ OpCode::PrintBool => print_simple(op),
+        op @ OpCode::VariableU8 => {
+            print_unary(op, get_op_u16(chunk, ip + 1) as u64);
+            3
+        }
+        op @ OpCode::VariableU64 => {
+            print_unary(op, get_op_u16(chunk, ip + 1) as u64);
+            3
+        }
     }
 }

@@ -15,7 +15,7 @@ pub enum TypeError {
 impl Ast {
     pub fn annotate_type(&mut self) -> Result<AstType, TypeError> {
         let t = match self {
-            Ast::Program(ps) => {
+            Ast::Program(ps) | Ast::Block(ps) => {
                 for p in ps.iter_mut() {
                     p.annotate_type()?;
                 }
@@ -28,6 +28,17 @@ impl Ast {
                 };
                 t.replace(expr_t);
                 AstType::Nil
+            }
+            Ast::Declaration(name, expr, t) => {
+                // TODO put type for name in hashmap to check types when referenced
+                let expr_t = expr.annotate_type()?;
+                t.replace(expr_t);
+                AstType::Nil
+            }
+            Ast::Variable(name, t) => {
+                // TODO lookup variable type from name
+                t.replace(AstType::Float);
+                AstType::Float
             }
             Ast::ExprStatement(expr, t) => {
                 let expr_t = expr.annotate_type()?;
