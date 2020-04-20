@@ -14,8 +14,10 @@ pub enum TypeError {
 impl Ast {
     pub fn annotate_type(&mut self) -> Result<AstType, TypeError> {
         let t = match self {
-            Ast::Program(a) => {
-                a.annotate_type()?;
+            Ast::Program(ps) => {
+                for p in ps.iter_mut() {
+                    p.annotate_type()?;
+                }
                 AstType::Nil
             }
             Ast::Float(_) => AstType::Float,

@@ -9,8 +9,10 @@ fn binary_op(chunk: &mut Chunk, l: &Ast, r: &Ast, op: u8) {
 impl Ast {
     pub fn codegen(&self, chunk: &mut Chunk) {
         match self {
-            Ast::Program(expr) => {
-                expr.codegen(chunk);
+            Ast::Program(ps) => {
+                for p in ps.iter() {
+                    p.codegen(chunk);
+                }
                 push_op(chunk, OP_RETURN);
             }
             Ast::Float(n) => {

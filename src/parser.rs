@@ -1,7 +1,7 @@
 use super::*;
 
 pub enum Ast {
-    Program(Box<Ast>),
+    Program(Vec<Ast>),
 
     Float(f64),
     Bool(bool),
@@ -71,19 +71,23 @@ fn get_rule(t: &TokenType) -> Rule {
 }
 
 pub fn parse(lexer: &mut Lexer) -> Ast {
-    Ast::Program(Box::new(parse_precedence(lexer, PREC_ASSIGNMENT)))
+    let mut parsed = vec![];
+    while lexer.current_t() != TokenType::Eof {
+        parsed.push(parse_precedence(lexer, PREC_ASSIGNMENT));
+    }
+    Ast::Program(parsed)
 }
 
 fn parse_precedence(lexer: &mut Lexer, prec: u32) -> Ast {
     lexer.next().unwrap();
 
-    let prefix_rule = get_rule(&lexer.prev_t()).0.unwrap();
+    let prefix_rule = get_rule(&lexer.prev_t().unwrap()).0.unwrap();
 
     let mut lhs = prefix_rule(lexer);
 
     while prec <= get_rule(&lexer.current_t()).2 {
         lexer.next();
-        let infix_rule = get_rule(&lexer.prev_t()).1.unwrap();
+        let infix_rule = get_rule(&lexer.prev_t().unwrap()).1.unwrap();
         lhs = infix_rule(lexer, lhs);
     }
 
@@ -91,7 +95,7 @@ fn parse_precedence(lexer: &mut Lexer, prec: u32) -> Ast {
 }
 
 fn literal(lexer: &mut Lexer) -> Ast {
-    match lexer.prev_t() {
+    match lexer.prev_t().unwrap() {
         TokenType::Float(f) => Ast::Float(f),
         TokenType::True => Ast::Bool(true),
         TokenType::False => Ast::Bool(false),
@@ -108,7 +112,7 @@ fn expression(lexer: &mut Lexer) -> Ast {
 }
 
 fn unary(lexer: &mut Lexer) -> Ast {
-    let t = lexer.prev_t();
+    let t = lexer.prev_t().unwrap();
     let expr = parse_precedence(lexer, PREC_UNARY);
     match t {
         TokenType::Minus => Ast::Negate(Box::new(expr)),
@@ -118,7 +122,7 @@ fn unary(lexer: &mut Lexer) -> Ast {
 }
 
 fn binary(lexer: &mut Lexer, lhs: Ast) -> Ast {
-    let t = lexer.prev_t();
+    let t = lexer.prev_t().unwrap();
     let rule = get_rule(&t);
     let rhs = parse_precedence(lexer, rule.2 + 1);
     match t {

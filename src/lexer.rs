@@ -75,36 +75,38 @@ impl Lexer {
             current: 0,
         })
     }
-    pub fn prev(&self) -> Token {
-        self.tokens[0.max(self.current - 1)].clone()
+    pub fn prev(&self) -> Option<Token> {
+        self.tokens.get(self.current - 1).cloned()
     }
-    pub fn prev_t(&self) -> TokenType {
-        self.prev().t
+    pub fn prev_t(&self) -> Option<TokenType> {
+        self.prev().map(|t| t.t)
     }
     pub fn current_t(&self) -> TokenType {
         self.tokens[self.current].t.clone()
     }
-    pub fn peek_t(&self) -> &TokenType {
-        if self.current + 1 >= self.tokens.len() {
-            return &TokenType::Eof;
-        }
-        &self.tokens[self.current + 1].t
+    pub fn peek(&self) -> Option<Token> {
+        self.tokens.get(self.current + 1).cloned()
+    }
+    pub fn peek_t(&self) -> Option<TokenType> {
+        self.peek().map(|t| t.t)
     }
     pub fn next(&mut self) -> Option<Token> {
-        if self.current + 1 >= self.tokens.len() {
-            return None;
+        match self.peek() {
+            Some(t) => {
+                self.current += 1;
+                Some(t)
+            }
+            None => None,
         }
-        self.current += 1;
-        Some(self.tokens[self.current].clone())
     }
-    pub fn next_t(&mut self) -> TokenType {
-        self.next().map(|t| t.t).unwrap_or(TokenType::Eof)
+    pub fn next_t(&mut self) -> Option<TokenType> {
+        self.next().map(|t| t.t)
     }
-    pub fn next_if(&mut self, p: &dyn Fn(&TokenType) -> bool) -> Option<TokenType> {
-        if p(self.peek_t()) {
-            return Some(self.next_t());
+    pub fn next_if(&mut self, p: fn(&TokenType) -> bool) -> Option<TokenType> {
+        match self.peek_t() {
+            Some(t) if p(&t) => self.next_t(),
+            _ => None,
         }
-        None
     }
 }
 
