@@ -18,6 +18,45 @@ pub fn print_lexer_err(source: &String, error: LexerError) {
     }
 }
 
+fn flatmap_parser_error(error: ParserError, list: &mut Vec<(Token, &'static str)>) {
+    match error {
+        ParserError::Unexpected(token, msg) => list.push((token, msg)),
+        ParserError::BlockErrors(errors) => {
+            for error in errors.into_iter() {
+                flatmap_parser_error(error, list);
+            }
+        }
+    }
+}
+
+pub fn print_parser_error(source: &String, error: ParserError) {
+    let mut errors = vec![];
+    flatmap_parser_error(error, &mut errors);
+    let lines_map = source.chars().fold(vec![0], |mut acc, c| {
+        acc.push(
+            acc.last().unwrap()
+                + match c {
+                    '\n' => 1,
+                    _ => 0,
+                },
+        );
+        acc
+    });
+    let lines: Vec<&str> = source.lines().collect();
+    let errors: Vec<(Token, &'static str, i32)> = errors
+        .into_iter()
+        .map(|err| {
+            let line = lines_map[err.0.start];
+            (err.0, err.1, line)
+        })
+        .collect();
+    eprintln!("{} parser errors!\n", errors.len());
+    for error in errors.iter() {
+        eprintln!("...\n{: >3} | {}\n...", error.2, lines[error.2 as usize]);
+        eprintln!("> on token {:?}: \"{}\"", error.0.t, error.1);
+    }
+}
+
 impl fmt::Display for OpCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)

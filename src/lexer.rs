@@ -81,6 +81,9 @@ impl Lexer {
     pub fn prev_t(&self) -> Option<TokenType> {
         self.prev().map(|t| t.t)
     }
+    pub fn current(&self) -> Token {
+        self.tokens[self.current].clone()
+    }
     pub fn current_t(&self) -> TokenType {
         self.tokens[self.current].t.clone()
     }

@@ -32,9 +32,16 @@ pub enum Ast {
     LesserEqual(Box<Ast>, Box<Ast>, Option<AstType>),
 }
 
+type ParserResult<T> = Result<T, ParserError>;
+#[derive(Debug)]
+pub enum ParserError {
+    Unexpected(Token, &'static str),
+    BlockErrors(Vec<ParserError>),
+}
+
 type Rule = (
-    Option<fn(&mut Lexer) -> Ast>,
-    Option<fn(&mut Lexer, Ast) -> Ast>,
+    Option<fn(&mut Lexer) -> ParserResult<Ast>>,
+    Option<fn(&mut Lexer, Ast) -> ParserResult<Ast>>,
     u32,
 );
 
@@ -50,11 +57,12 @@ pub const PREC_UNARY: u32 = 80; // ! -
 pub const PREC_CALL: u32 = 90; // . ()
 pub const PREC_PRIMARY: u32 = 100;
 
-fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool) {
+fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool, msg: &'static str) -> ParserResult<()> {
     if !p(&lexer.current_t()) {
-        todo!();
+        return Err(ParserError::Unexpected(lexer.current(), msg));
     }
     lexer.next();
+    Ok(())
 }
 
 fn get_rule(t: &TokenType) -> Rule {
@@ -80,62 +88,102 @@ fn get_rule(t: &TokenType) -> Rule {
     }
 }
 
-pub fn parse(lexer: &mut Lexer) -> Ast {
-    let mut parsed = vec![];
+fn synchronize(lexer: &mut Lexer) {
     while lexer.current_t() != TokenType::Eof {
-        parsed.push(declaration(lexer));
+        if let Some(TokenType::Semicolon) = lexer.prev_t() {
+            return;
+        }
+        match lexer.current_t() {
+            TokenType::Var | TokenType::Print => return,
+            _ => {}
+        }
+        lexer.next();
     }
-    Ast::Program(parsed)
 }
 
-fn parse_precedence(lexer: &mut Lexer, prec: u32) -> Ast {
+pub fn parse(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let mut parsed = vec![];
+    let mut errors = vec![];
+    while lexer.current_t() != TokenType::Eof {
+        match declaration(lexer) {
+            Ok(decl) => parsed.push(decl),
+            Err(error) => {
+                errors.push(error);
+                synchronize(lexer);
+            }
+        }
+    }
+    if errors.len() > 0 {
+        Err(ParserError::BlockErrors(errors))
+    } else {
+        Ok(Ast::Program(parsed))
+    }
+}
+
+fn parse_precedence(lexer: &mut Lexer, prec: u32) -> ParserResult<Ast> {
     lexer.next().unwrap();
 
-    let prefix_rule = get_rule(&lexer.prev_t().unwrap()).0.unwrap();
+    let prefix_rule = get_rule(&lexer.prev_t().unwrap()).0.ok_or_else(|| {
+        ParserError::Unexpected(
+            lexer.prev().unwrap(),
+            "unexpected token in prefix prosition",
+        )
+    })?;
 
-    let mut lhs = prefix_rule(lexer);
+    let mut lhs = prefix_rule(lexer)?;
 
     while prec <= get_rule(&lexer.current_t()).2 {
         lexer.next();
-        let infix_rule = get_rule(&lexer.prev_t().unwrap()).1.unwrap();
-        lhs = infix_rule(lexer, lhs);
+        let infix_rule = get_rule(&lexer.prev_t().unwrap()).1.ok_or_else(|| {
+            ParserError::Unexpected(lexer.prev().unwrap(), "unexpected token in infox prosition")
+        })?;
+        lhs = infix_rule(lexer, lhs)?;
     }
 
-    lhs
+    Ok(lhs)
 }
 
-fn literal(lexer: &mut Lexer) -> Ast {
-    match lexer.prev_t().unwrap() {
+fn literal(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let ast = match lexer.prev_t().unwrap() {
         TokenType::Float(f) => Ast::Float(f),
         TokenType::True => Ast::Bool(true),
         TokenType::False => Ast::Bool(false),
         TokenType::Nil => Ast::Nil,
-        _ => todo!(
-            "parsing literal of type {:?} not implemented",
-            lexer.prev_t()
-        ),
-    }
+        _ => {
+            return Err(ParserError::Unexpected(
+                lexer.prev().unwrap(),
+                "unexpected token when parsing literal",
+            ))
+        }
+    };
+    Ok(ast)
 }
 
-fn expression(lexer: &mut Lexer) -> Ast {
+fn expression(lexer: &mut Lexer) -> ParserResult<Ast> {
     parse_precedence(lexer, PREC_ASSIGNMENT)
 }
 
-fn unary(lexer: &mut Lexer) -> Ast {
+fn unary(lexer: &mut Lexer) -> ParserResult<Ast> {
     let t = lexer.prev_t().unwrap();
-    let expr = parse_precedence(lexer, PREC_UNARY);
-    match t {
+    let expr = parse_precedence(lexer, PREC_UNARY)?;
+    let ast = match t {
         TokenType::Minus => Ast::Negate(Box::new(expr)),
         TokenType::Bang => Ast::Not(Box::new(expr)),
-        _ => todo!(),
-    }
+        _ => {
+            return Err(ParserError::Unexpected(
+                lexer.prev().unwrap(),
+                "unexpected token when parsing unary expression",
+            ))
+        }
+    };
+    Ok(ast)
 }
 
-fn binary(lexer: &mut Lexer, lhs: Ast) -> Ast {
+fn binary(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
     let t = lexer.prev_t().unwrap();
     let rule = get_rule(&t);
-    let rhs = parse_precedence(lexer, rule.2 + 1);
-    match t {
+    let rhs = parse_precedence(lexer, rule.2 + 1)?;
+    let ast = match t {
         TokenType::Star => Ast::Multiply(Box::new(lhs), Box::new(rhs), None),
         TokenType::Slash => Ast::Divide(Box::new(lhs), Box::new(rhs), None),
         TokenType::Plus => Ast::Add(Box::new(lhs), Box::new(rhs), None),
@@ -146,17 +194,27 @@ fn binary(lexer: &mut Lexer, lhs: Ast) -> Ast {
         TokenType::GreaterEqual => Ast::GreaterEqual(Box::new(lhs), Box::new(rhs), None),
         TokenType::Lesser => Ast::Lesser(Box::new(lhs), Box::new(rhs), None),
         TokenType::LesserEqual => Ast::LesserEqual(Box::new(lhs), Box::new(rhs), None),
-        _ => todo!(),
-    }
+        _ => {
+            return Err(ParserError::Unexpected(
+                lexer.prev().unwrap(),
+                "unexpected token when parsing binary expression",
+            ))
+        }
+    };
+    Ok(ast)
 }
 
-fn grouping(lexer: &mut Lexer) -> Ast {
-    let expr = expression(lexer);
-    consume(lexer, |t| t == &TokenType::RightPar);
-    expr
+fn grouping(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let expr = expression(lexer)?;
+    consume(
+        lexer,
+        |t| t == &TokenType::RightPar,
+        "expected ')' after grouping",
+    )?;
+    Ok(expr)
 }
 
-fn declaration(lexer: &mut Lexer) -> Ast {
+fn declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
     match lexer.current_t() {
         TokenType::Var => {
             lexer.next();
@@ -166,47 +224,65 @@ fn declaration(lexer: &mut Lexer) -> Ast {
     }
 }
 
-fn var_declaration(lexer: &mut Lexer) -> Ast {
-    let name = parse_variable(lexer);
+fn var_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let name = parse_variable(lexer)?;
 
-    consume(lexer, |t| t == &TokenType::Equal);
-    let expr = expression(lexer);
+    consume(
+        lexer,
+        |t| t == &TokenType::Equal,
+        "expected ' = [expression];'",
+    )?;
+    let expr = expression(lexer)?;
 
-    consume(lexer, |t| t == &TokenType::Semicolon);
+    consume(
+        lexer,
+        |t| t == &TokenType::Semicolon,
+        "expected ';' after declaration",
+    )?;
 
-    Ast::Declaration(name, Box::new(expr), None)
+    Ok(Ast::Declaration(name, Box::new(expr), None))
 }
 
-fn parse_variable(lexer: &mut Lexer) -> String {
+fn parse_variable(lexer: &mut Lexer) -> ParserResult<String> {
     match lexer.current_t() {
         TokenType::Identifier(s) => {
             lexer.next();
-            s
+            Ok(s)
         }
-        _ => todo!(),
+        _ => {
+            return Err(ParserError::Unexpected(
+                lexer.current(),
+                "unexpected token when parsing variable, expected identifier",
+            ))
+        }
     }
 }
 
-fn variable(lexer: &mut Lexer) -> Ast {
+fn variable(lexer: &mut Lexer) -> ParserResult<Ast> {
     named_variable(lexer)
 }
 
-fn named_variable(lexer: &mut Lexer) -> Ast {
+fn named_variable(lexer: &mut Lexer) -> ParserResult<Ast> {
     let name = match lexer.prev_t().unwrap() {
         TokenType::Identifier(name) => name,
-        _ => todo!(),
+        _ => {
+            return Err(ParserError::Unexpected(
+                lexer.prev().unwrap(),
+                "unexpected token when parsing variable, expected identifier",
+            ))
+        }
     };
     match lexer.current_t() {
         TokenType::Equal => {
             lexer.next();
-            let expr = expression(lexer);
-            Ast::Assign(name, Box::new(expr), None)
+            let expr = expression(lexer)?;
+            Ok(Ast::Assign(name, Box::new(expr), None))
         }
-        _ => Ast::Variable(name, None),
+        _ => Ok(Ast::Variable(name, None)),
     }
 }
 
-fn statement(lexer: &mut Lexer) -> Ast {
+fn statement(lexer: &mut Lexer) -> ParserResult<Ast> {
     match lexer.current_t() {
         TokenType::Print => {
             lexer.next();
@@ -220,23 +296,48 @@ fn statement(lexer: &mut Lexer) -> Ast {
     }
 }
 
-fn print_statement(lexer: &mut Lexer) -> Ast {
-    let expr = expression(lexer);
-    consume(lexer, |t| t == &TokenType::Semicolon);
-    Ast::Print(Box::new(expr), None)
+fn print_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let expr = expression(lexer)?;
+    consume(
+        lexer,
+        |t| t == &TokenType::Semicolon,
+        "expected ';' after print statement",
+    )?;
+    Ok(Ast::Print(Box::new(expr), None))
 }
 
-fn block(lexer: &mut Lexer) -> Ast {
+fn block(lexer: &mut Lexer) -> ParserResult<Ast> {
     let mut parsed = vec![];
-    while lexer.current_t() != TokenType::RightBrace {
-        parsed.push(declaration(lexer));
+    let mut errors = vec![];
+    while match lexer.current_t() {
+        TokenType::RightBrace | TokenType::Eof => false,
+        _ => true,
+    } {
+        match declaration(lexer) {
+            Ok(decl) => parsed.push(decl),
+            Err(error) => {
+                errors.push(error);
+                synchronize(lexer);
+            }
+        }
     }
-    consume(lexer, |t| t == &TokenType::RightBrace);
-    Ast::Block(parsed)
+    if let Err(error) = consume(
+        lexer,
+        |t| t == &TokenType::RightBrace,
+        "expected '}' after block",
+    ) {
+        errors.push(error);
+        synchronize(lexer);
+    }
+    if errors.len() > 0 {
+        Err(ParserError::BlockErrors(errors))
+    } else {
+        Ok(Ast::Block(parsed))
+    }
 }
 
-fn expression_statement(lexer: &mut Lexer) -> Ast {
-    let expr = expression(lexer);
-    consume(lexer, |t| t == &TokenType::Semicolon);
-    Ast::ExprStatement(Box::new(expr), None)
+fn expression_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let expr = expression(lexer)?;
+    consume(lexer, |t| t == &TokenType::Semicolon, "expected ';'")?;
+    Ok(Ast::ExprStatement(Box::new(expr), None))
 }
