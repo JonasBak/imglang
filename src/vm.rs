@@ -22,8 +22,15 @@ pub fn run_vm(mut chunk: Chunk) {
         ip = ip + 1;
         match get_op(&chunk, ip - 1) {
             OP_RETURN => {
-                println!("RETURN: {}", pop_bool(&mut chunk));
                 return;
+            }
+            OP_PRINT_F64 => {
+                let a = pop_f64(&mut chunk);
+                println!("< {}", a);
+            }
+            OP_PRINT_BOOL => {
+                let a = pop_bool(&mut chunk);
+                println!("< {}", a);
             }
             OP_CONSTANT_F64 => {
                 let i = get_op_u16(&mut chunk, ip);

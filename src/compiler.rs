@@ -15,6 +15,22 @@ impl Ast {
                 }
                 push_op(chunk, OP_RETURN);
             }
+            Ast::Print(expr, t) => {
+                expr.codegen(chunk);
+                match t.unwrap() {
+                    AstType::Bool => push_op(chunk, OP_PRINT_BOOL),
+                    AstType::Float => push_op(chunk, OP_PRINT_F64),
+                    _ => todo!(),
+                };
+            }
+            Ast::ExprStatement(expr, t) => {
+                expr.codegen(chunk);
+                match t.unwrap() {
+                    AstType::Bool => push_op(chunk, OP_POP_U8),
+                    AstType::Float => push_op(chunk, OP_POP_U64),
+                    _ => todo!(),
+                };
+            }
             Ast::Float(n) => {
                 let i = add_const_f64(chunk, *n);
                 push_op(chunk, OP_CONSTANT_F64);

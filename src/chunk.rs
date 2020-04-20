@@ -17,6 +17,8 @@ pub const OP_EQUAL_U8: u8 = 13;
 pub const OP_EQUAL_U64: u8 = 14;
 pub const OP_GREATER_F64: u8 = 15;
 pub const OP_LESSER_F64: u8 = 16;
+pub const OP_PRINT_F64: u8 = 17;
+pub const OP_PRINT_BOOL: u8 = 18;
 
 pub struct Chunk {
     code: Vec<u8>,

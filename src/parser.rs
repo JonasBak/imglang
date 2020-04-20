@@ -2,6 +2,9 @@ use super::*;
 
 pub enum Ast {
     Program(Vec<Ast>),
+    Print(Box<Ast>, Option<AstType>),
+
+    ExprStatement(Box<Ast>, Option<AstType>),
 
     Float(f64),
     Bool(bool),
@@ -73,7 +76,7 @@ fn get_rule(t: &TokenType) -> Rule {
 pub fn parse(lexer: &mut Lexer) -> Ast {
     let mut parsed = vec![];
     while lexer.current_t() != TokenType::Eof {
-        parsed.push(parse_precedence(lexer, PREC_ASSIGNMENT));
+        parsed.push(declaration(lexer));
     }
     Ast::Program(parsed)
 }
@@ -144,4 +147,30 @@ fn grouping(lexer: &mut Lexer) -> Ast {
     let expr = expression(lexer);
     consume(lexer, |t| t == &TokenType::RightPar);
     expr
+}
+
+fn declaration(lexer: &mut Lexer) -> Ast {
+    statement(lexer)
+}
+
+fn statement(lexer: &mut Lexer) -> Ast {
+    match lexer.current_t() {
+        TokenType::Print => {
+            lexer.next();
+            print_statement(lexer)
+        }
+        _ => expression_statement(lexer),
+    }
+}
+
+fn print_statement(lexer: &mut Lexer) -> Ast {
+    let expr = expression(lexer);
+    consume(lexer, |t| t == &TokenType::Semicolon);
+    Ast::Print(Box::new(expr), None)
+}
+
+fn expression_statement(lexer: &mut Lexer) -> Ast {
+    let expr = expression(lexer);
+    consume(lexer, |t| t == &TokenType::Semicolon);
+    Ast::ExprStatement(Box::new(expr), None)
 }

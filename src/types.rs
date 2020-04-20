@@ -8,6 +8,7 @@ pub enum AstType {
 }
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TypeError {
+    NotAllowed(AstType),
     Mismatch(AstType, AstType),
 }
 
@@ -18,6 +19,19 @@ impl Ast {
                 for p in ps.iter_mut() {
                     p.annotate_type()?;
                 }
+                AstType::Nil
+            }
+            Ast::Print(expr, t) => {
+                let expr_t = match expr.annotate_type()? {
+                    t @ AstType::Bool | t @ AstType::Float => t,
+                    t @ _ => return Err(TypeError::NotAllowed(t)),
+                };
+                t.replace(expr_t);
+                AstType::Nil
+            }
+            Ast::ExprStatement(expr, t) => {
+                let expr_t = expr.annotate_type()?;
+                t.replace(expr_t);
                 AstType::Nil
             }
             Ast::Float(_) => AstType::Float,
