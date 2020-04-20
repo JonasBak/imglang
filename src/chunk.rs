@@ -1,24 +1,41 @@
 use std::convert::TryInto;
 
-pub const OP_RETURN: u8 = 0;
-pub const OP_CONSTANT_F64: u8 = 1;
-pub const OP_NEGATE_F64: u8 = 2;
-pub const OP_MULTIPLY_F64: u8 = 3;
-pub const OP_DIVIDE_F64: u8 = 4;
-pub const OP_ADD_F64: u8 = 5;
-pub const OP_SUB_F64: u8 = 6;
-pub const OP_NIL: u8 = 7;
-pub const OP_TRUE: u8 = 8;
-pub const OP_FALSE: u8 = 9;
-pub const OP_POP_U8: u8 = 10;
-pub const OP_POP_U64: u8 = 11;
-pub const OP_NOT: u8 = 12;
-pub const OP_EQUAL_U8: u8 = 13;
-pub const OP_EQUAL_U64: u8 = 14;
-pub const OP_GREATER_F64: u8 = 15;
-pub const OP_LESSER_F64: u8 = 16;
-pub const OP_PRINT_F64: u8 = 17;
-pub const OP_PRINT_BOOL: u8 = 18;
+macro_rules! generate_opcodes {
+    ($($types:ident,)+) => {
+        #[derive(Debug, Copy, Clone, PartialEq)]
+        pub enum OpCode { $($types,)+ }
+        const OPCODE_LOOKUP: &[OpCode] = &[
+            $(OpCode::$types,)+
+        ];
+        impl From<u8> for OpCode {
+	    fn from(op: u8) -> Self {
+                OPCODE_LOOKUP[op as usize]
+	    }
+	}
+    };
+}
+
+generate_opcodes!(
+    Return,
+    ConstantF64,
+    NegateF64,
+    MultiplyF64,
+    DivideF64,
+    AddF64,
+    SubF64,
+    Nil,
+    True,
+    False,
+    PopU8,
+    PopU64,
+    Not,
+    EqualU8,
+    EqualU64,
+    GreaterF64,
+    LesserF64,
+    PrintF64,
+    PrintBool,
+);
 
 pub struct Chunk {
     code: Vec<u8>,

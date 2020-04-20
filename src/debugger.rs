@@ -1,4 +1,5 @@
 use super::*;
+use std::fmt;
 
 pub fn print_lexer_err(source: &String, error: LexerError) {
     let mut source = source.clone();
@@ -14,6 +15,12 @@ pub fn print_lexer_err(source: &String, error: LexerError) {
         LexerError::Unescaped(i) => {
             println!("Error: Unescaped string starting at {}", i);
         }
+    }
+}
+
+impl fmt::Display for OpCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -33,38 +40,37 @@ pub fn disassemble_chunk(chunk: &Chunk) {
     println!("{:*^64}", "");
 }
 
-fn print_simple(op: u8, op_string: &str) -> usize {
-    println!("{: >3} {: <24}", op, op_string);
+fn print_simple(op: OpCode) -> usize {
+    println!("{: >3} {: <24}", op as u8, op);
     1
 }
-fn print_unary(op: u8, op_string: &str, operand: u64) {
-    println!("{: >3} {: <24}\t{: >8}", op, op_string, operand);
+fn print_unary(op: OpCode, operand: u64) {
+    println!("{: >3} {: <24}\t{: >8}", op as u8, op, operand);
 }
 
 pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
-    match get_op(chunk, ip) {
-        op @ OP_RETURN => print_simple(op, "OP_RETURN"),
-        op @ OP_CONSTANT_F64 => {
-            print_unary(op, "OP_CONSTANT_F64", get_op(chunk, ip + 1) as u64);
+    match OpCode::from(get_op(chunk, ip)) {
+        op @ OpCode::Return => print_simple(op),
+        op @ OpCode::ConstantF64 => {
+            print_unary(op, get_op_u16(chunk, ip + 1) as u64);
             3
         }
-        op @ OP_NEGATE_F64 => print_simple(op, "OP_NEGATE_F64"),
-        op @ OP_MULTIPLY_F64 => print_simple(op, "OP_MULTIPLY_F64"),
-        op @ OP_DIVIDE_F64 => print_simple(op, "OP_DIVIDE_F64"),
-        op @ OP_ADD_F64 => print_simple(op, "OP_ADD_F64"),
-        op @ OP_SUB_F64 => print_simple(op, "OP_SUB_F64"),
-        op @ OP_NIL => print_simple(op, "OP_NIL"),
-        op @ OP_TRUE => print_simple(op, "OP_TRUE"),
-        op @ OP_FALSE => print_simple(op, "OP_FALSE"),
-        op @ OP_POP_U8 => print_simple(op, "OP_POP_U8"),
-        op @ OP_POP_U64 => print_simple(op, "OP_POP_U64"),
-        op @ OP_NOT => print_simple(op, "OP_NOT"),
-        op @ OP_EQUAL_U8 => print_simple(op, "OP_EQUAL_U8"),
-        op @ OP_EQUAL_U64 => print_simple(op, "OP_EQUAL_U64"),
-        op @ OP_GREATER_F64 => print_simple(op, "OP_GREATER_F64"),
-        op @ OP_LESSER_F64 => print_simple(op, "OP_LESSER_F64"),
-        op @ OP_PRINT_F64 => print_simple(op, "OP_PRINT_F64"),
-        op @ OP_PRINT_BOOL => print_simple(op, "OP_PRINT_BOOL"),
-        op @ _ => print_simple(op, "?????"),
+        op @ OpCode::NegateF64 => print_simple(op),
+        op @ OpCode::MultiplyF64 => print_simple(op),
+        op @ OpCode::DivideF64 => print_simple(op),
+        op @ OpCode::AddF64 => print_simple(op),
+        op @ OpCode::SubF64 => print_simple(op),
+        op @ OpCode::Nil => print_simple(op),
+        op @ OpCode::True => print_simple(op),
+        op @ OpCode::False => print_simple(op),
+        op @ OpCode::PopU8 => print_simple(op),
+        op @ OpCode::PopU64 => print_simple(op),
+        op @ OpCode::Not => print_simple(op),
+        op @ OpCode::EqualU8 => print_simple(op),
+        op @ OpCode::EqualU64 => print_simple(op),
+        op @ OpCode::GreaterF64 => print_simple(op),
+        op @ OpCode::LesserF64 => print_simple(op),
+        op @ OpCode::PrintF64 => print_simple(op),
+        op @ OpCode::PrintBool => print_simple(op),
     }
 }
