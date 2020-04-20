@@ -35,7 +35,7 @@ pub fn run_vm(mut chunk: Chunk) {
             OpCode::ConstantF64 => {
                 let i = get_op_u16(&mut chunk, ip);
                 ip += 2;
-                let v = get_f64(&chunk, i);
+                let v = get_const_f64(&chunk, i);
                 push_f64(&mut chunk, v);
             }
             OpCode::NegateF64 => {
@@ -88,6 +88,20 @@ pub fn run_vm(mut chunk: Chunk) {
                 ip += 2;
                 let v = peek_u64(&mut chunk, i as usize);
                 push_u64(&mut chunk, v);
+            }
+            OpCode::AssignU8 => {
+                let i = get_op_u16(&mut chunk, ip);
+                ip += 2;
+                let top = chunk.len_stack() - 1;
+                let v = peek_u8(&mut chunk, top);
+                set_u8(&mut chunk, v, i as usize);
+            }
+            OpCode::AssignU64 => {
+                let i = get_op_u16(&mut chunk, ip);
+                ip += 2;
+                let top = chunk.len_stack() - 8;
+                let v = peek_u64(&mut chunk, top);
+                set_u64(&mut chunk, v, i as usize);
             }
         }
     }

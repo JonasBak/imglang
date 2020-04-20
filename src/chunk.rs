@@ -37,6 +37,8 @@ generate_opcodes!(
     PrintBool,
     VariableU8,
     VariableU64,
+    AssignU8,
+    AssignU64,
 );
 
 pub struct Chunk {
@@ -102,16 +104,16 @@ pub fn add_const_f64(chunk: &mut Chunk, data: f64) -> u16 {
 // get value from index in constants array
 // called by vm
 
-pub fn get_f64(chunk: &Chunk, i: u16) -> f64 {
+pub fn get_const_f64(chunk: &Chunk, i: u16) -> f64 {
     let i = i as usize;
     f64::from_le_bytes(chunk.data[i..i + 8].try_into().unwrap())
 }
-pub fn get_u64(chunk: &Chunk, i: u16) -> u64 {
+pub fn get_const_u64(chunk: &Chunk, i: u16) -> u64 {
     let i = i as usize;
     u64::from_le_bytes(chunk.data[i..i + 8].try_into().unwrap())
 }
 
-// peek/push/pop value to/from stack
+// peek/set/push/pop value to/from stack
 // called by vm
 
 pub fn push_f64(chunk: &mut Chunk, data: f64) {
@@ -127,6 +129,9 @@ pub fn pop_f64(chunk: &mut Chunk) -> f64 {
 pub fn peek_u8(chunk: &mut Chunk, i: usize) -> u8 {
     chunk.stack[i]
 }
+pub fn set_u8(chunk: &mut Chunk, data: u8, i: usize) {
+    chunk.stack[i] = data;
+}
 pub fn push_u8(chunk: &mut Chunk, data: u8) {
     chunk.stack.push(data);
 }
@@ -136,6 +141,9 @@ pub fn pop_u8(chunk: &mut Chunk) -> u8 {
 
 pub fn peek_u64(chunk: &mut Chunk, i: usize) -> u64 {
     u64::from_le_bytes(chunk.stack[i..i + 8].try_into().unwrap())
+}
+pub fn set_u64(chunk: &mut Chunk, data: u64, i: usize) {
+    chunk.stack[i..i + 8].copy_from_slice(&data.to_le_bytes());
 }
 pub fn push_u64(chunk: &mut Chunk, data: u64) {
     chunk.stack.extend_from_slice(&data.to_le_bytes());

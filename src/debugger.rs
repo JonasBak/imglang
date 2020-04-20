@@ -34,8 +34,12 @@ pub fn disassemble_chunk(chunk: &Chunk) {
     println!("{:*^64}", "DATA");
     for i in 0..chunk.len_data() / 8 {
         let p = i * 8;
-        println!("{:0>6}\t\t\t\tu64{: >24}", p, get_u64(&chunk, p as u16));
-        println!("\t\t\t\tf64{: >24}", get_f64(&chunk, p as u16));
+        println!(
+            "{:0>6}\t\t\t\tu64{: >24}",
+            p,
+            get_const_u64(&chunk, p as u16)
+        );
+        println!("\t\t\t\tf64{: >24}", get_const_f64(&chunk, p as u16));
     }
     println!("{:*^64}", "");
 }
@@ -77,6 +81,14 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
             3
         }
         op @ OpCode::VariableU64 => {
+            print_unary(op, get_op_u16(chunk, ip + 1) as u64);
+            3
+        }
+        op @ OpCode::AssignU8 => {
+            print_unary(op, get_op_u16(chunk, ip + 1) as u64);
+            3
+        }
+        op @ OpCode::AssignU64 => {
             print_unary(op, get_op_u16(chunk, ip + 1) as u64);
             3
         }

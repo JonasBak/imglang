@@ -8,6 +8,7 @@ pub enum Ast {
 
     Declaration(String, Box<Ast>, Option<AstType>),
     Variable(String, Option<AstType>),
+    Assign(String, Box<Ast>, Option<AstType>),
 
     ExprStatement(Box<Ast>, Option<AstType>),
 
@@ -187,13 +188,21 @@ fn parse_variable(lexer: &mut Lexer) -> String {
 }
 
 fn variable(lexer: &mut Lexer) -> Ast {
-    named_variable(lexer.prev_t().unwrap())
+    named_variable(lexer)
 }
 
-fn named_variable(name: TokenType) -> Ast {
-    match name {
-        TokenType::Identifier(name) => Ast::Variable(name, None),
+fn named_variable(lexer: &mut Lexer) -> Ast {
+    let name = match lexer.prev_t().unwrap() {
+        TokenType::Identifier(name) => name,
         _ => todo!(),
+    };
+    match lexer.current_t() {
+        TokenType::Equal => {
+            lexer.next();
+            let expr = expression(lexer);
+            Ast::Assign(name, Box::new(expr), None)
+        }
+        _ => Ast::Variable(name, None),
     }
 }
 

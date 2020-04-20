@@ -89,6 +89,18 @@ impl Compiler {
                 };
                 push_op_u16(chunk, v.offset);
             }
+            Ast::Assign(name, expr, t) => {
+                self.codegen(expr, chunk);
+                let v = self
+                    .resolve_variable(name)
+                    .expect("TODO could not resolve variable");
+                match t.unwrap() {
+                    AstType::Bool => push_op(chunk, OpCode::AssignU8 as u8),
+                    AstType::Float => push_op(chunk, OpCode::AssignU64 as u8),
+                    _ => todo!(),
+                };
+                push_op_u16(chunk, v.offset);
+            }
             Ast::ExprStatement(expr, t) => {
                 self.codegen(expr, chunk);
                 match t.unwrap() {

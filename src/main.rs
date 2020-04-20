@@ -15,10 +15,10 @@ use types::*;
 use vm::*;
 
 fn main() {
-    let mut lexer = Lexer::new(&"var a = 1;{var a = false; print a;}print a;".to_string()).unwrap();
+    let mut lexer = Lexer::new(&"var a = 1;{var a = a + 1; print a;}print a;".to_string()).unwrap();
     let mut ast = parse(&mut lexer);
-    TypeChecker::annotate_types(&mut ast).unwrap();
     println!("{:?}", ast);
+    TypeChecker::annotate_types(&mut ast).unwrap();
     let chunk = Compiler::compile(&ast);
     disassemble_chunk(&chunk);
     run_vm(chunk);

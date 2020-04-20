@@ -83,6 +83,18 @@ impl TypeChecker {
                 t.replace(v.t);
                 v.t
             }
+            Ast::Assign(name, expr, t) => {
+                let v_t = self
+                    .resolve_variable(name)
+                    .ok_or(TypeError::NotDefined(name.clone()))?
+                    .t;
+                let expr_t = self.annotate_type(expr)?;
+                if v_t != expr_t {
+                    return Err(TypeError::Mismatch(v_t, expr_t));
+                }
+                t.replace(expr_t);
+                v_t
+            }
             Ast::ExprStatement(expr, t) => {
                 let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t);
