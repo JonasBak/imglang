@@ -6,23 +6,64 @@ pub enum AstType {
     Bool,
     Nil,
 }
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
     NotAllowed(AstType),
     Mismatch(AstType, AstType),
+    NotDefined(String),
 }
 
-impl Ast {
-    pub fn annotate_type(&mut self) -> Result<AstType, TypeError> {
-        let t = match self {
-            Ast::Program(ps) | Ast::Block(ps) => {
+struct Variable {
+    name: String,
+    depth: u16,
+    t: AstType,
+}
+pub struct TypeChecker {
+    variables: Vec<Variable>,
+    current_scope_depth: u16,
+}
+
+impl TypeChecker {
+    pub fn annotate_types(ast: &mut Ast) -> Result<(), TypeError> {
+        let mut type_checker = TypeChecker {
+            variables: vec![],
+            current_scope_depth: 0,
+        };
+        type_checker.annotate_type(ast)?;
+        Ok(())
+    }
+    fn declare_variable(&mut self, name: &String, t: AstType) {
+        self.variables.push(Variable {
+            name: name.clone(),
+            depth: self.current_scope_depth,
+            t,
+        });
+    }
+    fn resolve_variable(&mut self, name: &String) -> Option<&Variable> {
+        self.variables.iter().rev().find(|v| &v.name == name)
+    }
+    fn annotate_type(&mut self, ast: &mut Ast) -> Result<AstType, TypeError> {
+        let t = match ast {
+            Ast::Program(ps) => {
                 for p in ps.iter_mut() {
-                    p.annotate_type()?;
+                    self.annotate_type(p)?;
+                }
+                AstType::Nil
+            }
+            Ast::Block(ps) => {
+                self.current_scope_depth += 1;
+                for p in ps.iter_mut() {
+                    self.annotate_type(p)?;
+                }
+                self.current_scope_depth -= 1;
+                while self.variables.last().map(|v| v.depth).unwrap_or(0) > self.current_scope_depth
+                {
+                    self.variables.pop();
                 }
                 AstType::Nil
             }
             Ast::Print(expr, t) => {
-                let expr_t = match expr.annotate_type()? {
+                let expr_t = match self.annotate_type(expr)? {
                     t @ AstType::Bool | t @ AstType::Float => t,
                     t @ _ => return Err(TypeError::NotAllowed(t)),
                 };
@@ -30,35 +71,37 @@ impl Ast {
                 AstType::Nil
             }
             Ast::Declaration(name, expr, t) => {
-                // TODO put type for name in hashmap to check types when referenced
-                let expr_t = expr.annotate_type()?;
+                let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t);
+                self.declare_variable(name, expr_t);
                 AstType::Nil
             }
             Ast::Variable(name, t) => {
-                // TODO lookup variable type from name
-                t.replace(AstType::Float);
-                AstType::Float
+                let v = self
+                    .resolve_variable(name)
+                    .ok_or(TypeError::NotDefined(name.clone()))?;
+                t.replace(v.t);
+                v.t
             }
             Ast::ExprStatement(expr, t) => {
-                let expr_t = expr.annotate_type()?;
+                let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t);
                 AstType::Nil
             }
             Ast::Float(_) => AstType::Float,
             Ast::Bool(_) => AstType::Bool,
             Ast::Nil => AstType::Nil,
-            Ast::Negate(a) => a.annotate_type()?,
+            Ast::Negate(a) => self.annotate_type(a)?,
             Ast::Not(a) => {
-                a.annotate_type()?;
+                self.annotate_type(a)?;
                 AstType::Bool
             }
             Ast::Multiply(l, r, t)
             | Ast::Divide(l, r, t)
             | Ast::Add(l, r, t)
             | Ast::Sub(l, r, t) => {
-                let t_l = l.annotate_type()?;
-                let t_r = r.annotate_type()?;
+                let t_l = self.annotate_type(l)?;
+                let t_r = self.annotate_type(r)?;
                 if t_l != t_r {
                     return Err(TypeError::Mismatch(t_l, t_r));
                 }
@@ -71,8 +114,8 @@ impl Ast {
             | Ast::GreaterEqual(l, r, t)
             | Ast::Lesser(l, r, t)
             | Ast::LesserEqual(l, r, t) => {
-                let t_l = l.annotate_type()?;
-                let t_r = r.annotate_type()?;
+                let t_l = self.annotate_type(l)?;
+                let t_r = self.annotate_type(r)?;
                 if t_l != t_r {
                     return Err(TypeError::Mismatch(t_l, t_r));
                 }
