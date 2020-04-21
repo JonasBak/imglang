@@ -11,6 +11,7 @@ pub enum Ast {
     Assign(String, Box<Ast>, Option<AstType>),
 
     If(Box<Ast>, Box<Ast>, Option<Box<Ast>>),
+    While(Box<Ast>, Box<Ast>),
 
     ExprStatement(Box<Ast>, Option<AstType>),
 
@@ -303,6 +304,10 @@ fn statement(lexer: &mut Lexer) -> ParserResult<Ast> {
             lexer.next();
             if_statement(lexer)
         }
+        TokenType::While => {
+            lexer.next();
+            while_statement(lexer)
+        }
         _ => expression_statement(lexer),
     }
 }
@@ -380,4 +385,21 @@ fn logic_and(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
 fn logic_or(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
     let rhs = parse_precedence(lexer, PREC_OR)?;
     Ok(Ast::Or(Box::new(lhs), Box::new(rhs)))
+}
+
+fn while_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    consume(
+        lexer,
+        |t| t == &TokenType::LeftPar,
+        "expected '(' after while",
+    )?;
+    let expr = expression(lexer)?;
+    consume(
+        lexer,
+        |t| t == &TokenType::RightPar,
+        "expected ')' after condition",
+    )?;
+    let stmt = statement(lexer)?;
+
+    Ok(Ast::While(Box::new(expr), Box::new(stmt)))
 }

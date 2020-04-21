@@ -122,6 +122,23 @@ impl Compiler {
 
                 chunk.backpatch_jump(if_jump);
             }
+            Ast::While(expr, stmt) => {
+                let loop_start = chunk.len_code();
+
+                self.codegen(expr, chunk);
+
+                chunk.push_op(OpCode::JumpIfFalse as u8);
+                let done_jump = chunk.push_op_u16(0);
+                chunk.push_op(OpCode::PopU8 as u8);
+
+                self.codegen(stmt, chunk);
+
+                chunk.push_op(OpCode::Jump as u8);
+                chunk.push_op_u16(loop_start as u16);
+
+                chunk.backpatch_jump(done_jump);
+                chunk.push_op(OpCode::PopU8 as u8);
+            }
             Ast::ExprStatement(expr, t) => {
                 self.codegen(expr, chunk);
                 match t.unwrap() {

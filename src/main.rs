@@ -25,6 +25,11 @@ fn main() {
         print a;
         true and false and true;
         false or false or true or false;
+        var b = 0;
+        while (b < 10) {
+            print b;
+            b = b + 1;
+        }
         "
     .to_string();
     let mut lexer = Lexer::new(&source).unwrap();
