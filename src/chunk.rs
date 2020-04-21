@@ -46,143 +46,61 @@ generate_opcodes!(
 
 pub struct Chunk {
     code: Vec<u8>,
-    stack: Vec<u8>,
     data: Vec<u8>,
 }
 impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
             code: Vec::new(),
-            stack: Vec::new(),
             data: Vec::new(),
         }
     }
     pub fn len_code(&self) -> usize {
         self.code.len()
     }
-    pub fn len_stack(&self) -> usize {
-        self.stack.len()
-    }
     pub fn len_data(&self) -> usize {
         self.data.len()
     }
-}
 
-// add opcode, returns index useful for jumps
-// called by compiler
-pub fn push_op(chunk: &mut Chunk, op: u8) -> usize {
-    chunk.code.push(op);
-    chunk.code.len() - 1
-}
-pub fn push_op_u16(chunk: &mut Chunk, op: u16) -> usize {
-    chunk.code.extend_from_slice(&op.to_le_bytes());
-    chunk.code.len() - 2
-}
-pub fn push_op_u32(chunk: &mut Chunk, op: u32) -> usize {
-    chunk.code.extend_from_slice(&op.to_le_bytes());
-    chunk.code.len() - 4
-}
+    pub fn push_op(&mut self, op: u8) -> usize {
+        self.code.push(op);
+        self.code.len() - 1
+    }
+    pub fn push_op_u16(&mut self, op: u16) -> usize {
+        self.code.extend_from_slice(&op.to_le_bytes());
+        self.code.len() - 2
+    }
+    pub fn push_op_u32(&mut self, op: u32) -> usize {
+        self.code.extend_from_slice(&op.to_le_bytes());
+        self.code.len() - 4
+    }
 
-// get opcode pointed at by ip
-// called by vm
-pub fn get_op(chunk: &Chunk, ip: usize) -> u8 {
-    chunk.code[ip]
-}
-pub fn get_op_u16(chunk: &Chunk, ip: usize) -> u16 {
-    u16::from_le_bytes(chunk.code[ip..ip + 2].try_into().unwrap())
-}
-pub fn get_op_u32(chunk: &Chunk, ip: usize) -> u32 {
-    u32::from_le_bytes(chunk.code[ip..ip + 4].try_into().unwrap())
-}
+    pub fn get_op(&self, ip: usize) -> u8 {
+        self.code[ip]
+    }
+    pub fn get_op_u16(&self, ip: usize) -> u16 {
+        u16::from_le_bytes(self.code[ip..ip + 2].try_into().unwrap())
+    }
+    pub fn get_op_u32(&self, ip: usize) -> u32 {
+        u32::from_le_bytes(self.code[ip..ip + 4].try_into().unwrap())
+    }
 
-pub fn backpatch_jump(chunk: &mut Chunk, offset: usize) {
-    let top = chunk.code.len() as u16;
-    chunk.code[offset..offset + 2].copy_from_slice(&top.to_le_bytes());
-}
+    pub fn backpatch_jump(&mut self, offset: usize) {
+        let top = self.code.len() as u16;
+        self.code[offset..offset + 2].copy_from_slice(&top.to_le_bytes());
+    }
 
-// add value to constants array, returns index used
-// to load value with constant opcodes
-// called by compiler
+    pub fn add_const_f64(&mut self, data: f64) -> u16 {
+        self.data.extend_from_slice(&data.to_le_bytes());
+        (self.data.len() - 8) as u16
+    }
 
-pub fn add_const_f64(chunk: &mut Chunk, data: f64) -> u16 {
-    chunk.data.extend_from_slice(&data.to_le_bytes());
-    (chunk.data.len() - 8) as u16
-}
-
-// get value from index in constants array
-// called by vm
-
-pub fn get_const_f64(chunk: &Chunk, i: u16) -> f64 {
-    let i = i as usize;
-    f64::from_le_bytes(chunk.data[i..i + 8].try_into().unwrap())
-}
-pub fn get_const_u64(chunk: &Chunk, i: u16) -> u64 {
-    let i = i as usize;
-    u64::from_le_bytes(chunk.data[i..i + 8].try_into().unwrap())
-}
-
-// peek/set/push/pop value to/from stack
-// called by vm
-
-pub fn push_f64(chunk: &mut Chunk, data: f64) {
-    chunk.stack.extend_from_slice(&data.to_le_bytes());
-}
-pub fn pop_f64(chunk: &mut Chunk) -> f64 {
-    let l = chunk.stack.len() - 8;
-    let v = f64::from_le_bytes(chunk.stack[l..].try_into().unwrap());
-    chunk.stack.truncate(l);
-    v
-}
-
-pub fn peek_u8(chunk: &mut Chunk, i: usize) -> u8 {
-    chunk.stack[i]
-}
-pub fn set_u8(chunk: &mut Chunk, data: u8, i: usize) {
-    chunk.stack[i] = data;
-}
-pub fn push_u8(chunk: &mut Chunk, data: u8) {
-    chunk.stack.push(data);
-}
-pub fn pop_u8(chunk: &mut Chunk) -> u8 {
-    chunk.stack.pop().unwrap()
-}
-
-pub fn pop_u16(chunk: &mut Chunk) -> u16 {
-    let l = chunk.stack.len() - 2;
-    let v = u16::from_le_bytes(chunk.stack[l..].try_into().unwrap());
-    chunk.stack.truncate(l);
-    v
-}
-
-pub fn peek_u64(chunk: &mut Chunk, i: usize) -> u64 {
-    u64::from_le_bytes(chunk.stack[i..i + 8].try_into().unwrap())
-}
-pub fn set_u64(chunk: &mut Chunk, data: u64, i: usize) {
-    chunk.stack[i..i + 8].copy_from_slice(&data.to_le_bytes());
-}
-pub fn push_u64(chunk: &mut Chunk, data: u64) {
-    chunk.stack.extend_from_slice(&data.to_le_bytes());
-}
-pub fn pop_u64(chunk: &mut Chunk) -> u64 {
-    let l = chunk.stack.len() - 8;
-    let v = u64::from_le_bytes(chunk.stack[l..].try_into().unwrap());
-    chunk.stack.truncate(l);
-    v
-}
-
-pub fn peek_bool(chunk: &mut Chunk, i: usize) -> bool {
-    chunk.stack[i] != 0
-}
-pub fn push_bool(chunk: &mut Chunk, data: bool) {
-    chunk.stack.push(data as u8);
-}
-pub fn pop_bool(chunk: &mut Chunk) -> bool {
-    chunk.stack.pop().unwrap() != 0
-}
-
-pub fn push_nil(chunk: &mut Chunk) {
-    chunk.stack.push(0);
-}
-pub fn pop_nil(chunk: &mut Chunk) {
-    chunk.stack.pop().unwrap();
+    pub fn get_const_f64(&self, i: u16) -> f64 {
+        let i = i as usize;
+        f64::from_le_bytes(self.data[i..i + 8].try_into().unwrap())
+    }
+    pub fn get_const_u64(&self, i: u16) -> u64 {
+        let i = i as usize;
+        u64::from_le_bytes(self.data[i..i + 8].try_into().unwrap())
+    }
 }

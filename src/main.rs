@@ -37,5 +37,6 @@ fn main() {
     TypeChecker::annotate_types(&mut ast).unwrap();
     let chunk = Compiler::compile(&ast);
     disassemble_chunk(&chunk);
-    run_vm(chunk);
+    let mut vm = VM::new();
+    vm.run(chunk);
 }
