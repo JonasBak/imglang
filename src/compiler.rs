@@ -223,6 +223,35 @@ impl Compiler {
                 };
                 chunk.push_op(OpCode::Not as u8);
             }
+            Ast::And(l, r) => {
+                self.codegen(l, chunk);
+
+                chunk.push_op(OpCode::JumpIfFalse as u8);
+                let false_jump = chunk.push_op_u16(0);
+
+                chunk.push_op(OpCode::PopU8 as u8);
+
+                self.codegen(r, chunk);
+
+                chunk.backpatch_jump(false_jump);
+            }
+            Ast::Or(l, r) => {
+                self.codegen(l, chunk);
+
+                chunk.push_op(OpCode::JumpIfFalse as u8);
+                let false_jump = chunk.push_op_u16(0);
+
+                chunk.push_op(OpCode::Jump as u8);
+                let true_jump = chunk.push_op_u16(0);
+
+                chunk.backpatch_jump(false_jump);
+
+                chunk.push_op(OpCode::PopU8 as u8);
+
+                self.codegen(r, chunk);
+
+                chunk.backpatch_jump(true_jump);
+            }
         }
     }
 }

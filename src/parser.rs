@@ -32,6 +32,9 @@ pub enum Ast {
     GreaterEqual(Box<Ast>, Box<Ast>, Option<AstType>),
     Lesser(Box<Ast>, Box<Ast>, Option<AstType>),
     LesserEqual(Box<Ast>, Box<Ast>, Option<AstType>),
+
+    And(Box<Ast>, Box<Ast>),
+    Or(Box<Ast>, Box<Ast>),
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -86,6 +89,8 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::Lesser => (None, Some(binary), PREC_COMPARISON),
         TokenType::LesserEqual => (None, Some(binary), PREC_COMPARISON),
         TokenType::Identifier(_) => (Some(variable), None, PREC_NONE),
+        TokenType::And => (None, Some(logic_and), PREC_AND),
+        TokenType::Or => (None, Some(logic_or), PREC_OR),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -137,7 +142,7 @@ fn parse_precedence(lexer: &mut Lexer, prec: u32) -> ParserResult<Ast> {
     while prec <= get_rule(&lexer.current_t()).2 {
         lexer.next();
         let infix_rule = get_rule(&lexer.prev_t().unwrap()).1.ok_or_else(|| {
-            ParserError::Unexpected(lexer.prev().unwrap(), "unexpected token in infox prosition")
+            ParserError::Unexpected(lexer.prev().unwrap(), "unexpected token in infix prosition")
         })?;
         lhs = infix_rule(lexer, lhs)?;
     }
@@ -365,4 +370,14 @@ fn expression_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
     let expr = expression(lexer)?;
     consume(lexer, |t| t == &TokenType::Semicolon, "expected ';'")?;
     Ok(Ast::ExprStatement(Box::new(expr), None))
+}
+
+fn logic_and(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
+    let rhs = parse_precedence(lexer, PREC_AND)?;
+    Ok(Ast::And(Box::new(lhs), Box::new(rhs)))
+}
+
+fn logic_or(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
+    let rhs = parse_precedence(lexer, PREC_OR)?;
+    Ok(Ast::Or(Box::new(lhs), Box::new(rhs)))
 }

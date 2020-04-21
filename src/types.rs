@@ -145,6 +145,17 @@ impl TypeChecker {
                 t.replace(t_r);
                 AstType::Bool
             }
+            Ast::And(l, r) | Ast::Or(l, r) => {
+                let t_l = self.annotate_type(l)?;
+                let t_r = self.annotate_type(r)?;
+                if t_l != AstType::Bool {
+                    return Err(TypeError::NotAllowed(t_l));
+                }
+                if t_r != AstType::Bool {
+                    return Err(TypeError::NotAllowed(t_r));
+                }
+                AstType::Bool
+            }
         };
         Ok(t)
     }

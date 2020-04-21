@@ -23,6 +23,8 @@ fn main() {
             a = 1;
         }
         print a;
+        true and false and true;
+        false or false or true or false;
         "
     .to_string();
     let mut lexer = Lexer::new(&source).unwrap();
