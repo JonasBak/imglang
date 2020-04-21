@@ -1,12 +1,13 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Ast {
     Program(Vec<Ast>),
     Block(Vec<Ast>),
     Print(Box<Ast>, Option<AstType>),
 
     Declaration(String, Box<Ast>, Option<AstType>),
+    FuncDeclaration(String, Box<Ast>, Vec<AstType>, AstType),
     Variable(String, Option<AstType>),
     Assign(String, Box<Ast>, Option<AstType>),
 
@@ -236,6 +237,10 @@ fn declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
             lexer.next();
             var_declaration(lexer)
         }
+        TokenType::Fun => {
+            lexer.next();
+            func_declaration(lexer)
+        }
         _ => statement(lexer),
     }
 }
@@ -446,7 +451,7 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
     Ok(Ast::Function {
         body: Box::new(body),
         args,
-        ret_t: AstType::Float, // TODO
+        ret_t: AstType::Float, // TODO read type
     })
 }
 
@@ -473,4 +478,24 @@ fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
         "expected ')' after arguments",
     )?;
     Ok(Ast::Call(name, args))
+}
+
+fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let name = parse_variable(lexer)?;
+
+    let function = match function(lexer)? {
+        Ast::Function { body, args, ret_t } => Ast::FuncDeclaration(
+            name,
+            Box::new(Ast::Function {
+                body,
+                args: args.clone(),
+                ret_t: ret_t.clone(),
+            }),
+            args.into_iter().map(|a| a.1).collect(),
+            ret_t,
+        ),
+        _ => panic!(),
+    };
+
+    Ok(function)
 }

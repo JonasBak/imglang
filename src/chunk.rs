@@ -26,6 +26,7 @@ generate_opcodes!(
     Nil,
     True,
     False,
+    PushU16,
     PopU8,
     PopU16,
     PopU64,

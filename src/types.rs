@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashMap;
 use std::mem;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,36 +25,60 @@ pub enum TypeError {
     Mismatch(AstType, AstType),
     NotDefined(String),
     NotCallable(String),
+    NotAssignable(String),
+    BadCallSignature(String),
+    Other(String),
 }
 
-struct Variable {
+#[derive(Debug, Clone)]
+struct LocalVariable {
     name: String,
     depth: u16,
     t: AstType,
 }
+enum Variable {
+    Local(LocalVariable),
+    Global(AstType),
+}
 pub struct TypeChecker {
-    variables: Vec<Variable>,
+    variables: Vec<LocalVariable>,
+    globals: HashMap<String, AstType>,
     current_scope_depth: u16,
+    is_root: bool,
 }
 
 impl TypeChecker {
     pub fn annotate_types(ast: &mut Ast) -> Result<(), TypeError> {
         let mut type_checker = TypeChecker {
             variables: vec![],
+            globals: HashMap::new(),
             current_scope_depth: 0,
+            is_root: true,
         };
         type_checker.annotate_type(ast)?;
         Ok(())
     }
     fn declare_variable(&mut self, name: &String, t: AstType) {
-        self.variables.push(Variable {
+        self.variables.push(LocalVariable {
             name: name.clone(),
             depth: self.current_scope_depth,
             t,
         });
     }
-    fn resolve_variable(&mut self, name: &String) -> Option<&Variable> {
-        self.variables.iter().rev().find(|v| &v.name == name)
+    fn resolve_variable(&mut self, name: &String) -> Option<Variable> {
+        let local = self
+            .variables
+            .iter()
+            .rev()
+            .find(|v| &v.name == name)
+            .map(|v| Variable::Local(v.clone()));
+        if local.is_some() {
+            return local;
+        }
+        self.globals
+            .get(name)
+            .cloned()
+            .map(|var| Variable::Global(var))
     }
     fn annotate_type(&mut self, ast: &mut Ast) -> Result<AstType, TypeError> {
         let t = match ast {
@@ -89,19 +114,44 @@ impl TypeChecker {
                 self.declare_variable(name, expr_t);
                 AstType::Nil
             }
+            Ast::FuncDeclaration(name, func, args_t, t) => {
+                if self.is_root && self.current_scope_depth == 0 {
+                    self.globals.insert(
+                        name.clone(),
+                        AstType::Function(args_t.clone(), Box::new(t.clone())),
+                    );
+                } else {
+                    return Err(TypeError::Other(
+                        "global function declarations are only allowed at the top level"
+                            .to_string(),
+                    ));
+                }
+                self.annotate_type(func)?;
+                AstType::Nil
+            }
             Ast::Variable(name, t) => {
                 let v = self
                     .resolve_variable(name)
                     .ok_or(TypeError::NotDefined(name.clone()))?;
-                t.replace(v.t.clone());
-                v.t.clone()
+                match v {
+                    Variable::Local(local) => {
+                        t.replace(local.t.clone());
+                        local.t.clone()
+                    }
+                    Variable::Global(global) => {
+                        t.replace(global.clone());
+                        global.clone()
+                    }
+                }
             }
             Ast::Assign(name, expr, t) => {
-                let v_t = self
+                let v_t = match self
                     .resolve_variable(name)
                     .ok_or(TypeError::NotDefined(name.clone()))?
-                    .t
-                    .clone();
+                {
+                    Variable::Local(local) => local.t.clone(),
+                    Variable::Global(_) => return Err(TypeError::NotAssignable(name.clone())),
+                };
                 let expr_t = self.annotate_type(expr)?;
                 if v_t != expr_t {
                     return Err(TypeError::Mismatch(v_t, expr_t));
@@ -136,7 +186,9 @@ impl TypeChecker {
             Ast::Function { body, args, ret_t } => {
                 let old_variables = mem::replace(&mut self.variables, vec![]);
                 let old_depth = self.current_scope_depth;
+                let old_is_root = self.is_root;
                 self.current_scope_depth = 0;
+                self.is_root = false;
 
                 for arg in args.iter() {
                     self.declare_variable(&arg.0, arg.1.clone());
@@ -146,6 +198,7 @@ impl TypeChecker {
 
                 mem::replace(&mut self.variables, old_variables);
                 self.current_scope_depth = old_depth;
+                self.is_root = old_is_root;
 
                 if *ret_t != body_t {
                     return Err(TypeError::Mismatch(ret_t.clone(), body_t));
@@ -161,17 +214,19 @@ impl TypeChecker {
                 for arg in args.iter_mut() {
                     args_t.push(self.annotate_type(arg)?);
                 }
-                let (func_args_t, ret_t) = match &self
+                let (func_args_t, ret_t) = match self
                     .resolve_variable(name)
                     .ok_or(TypeError::NotDefined(name.clone()))?
-                    .clone()
-                    .t
                 {
-                    AstType::Function(a, r) => (a, r),
+                    Variable::Local(LocalVariable {
+                        t: AstType::Function(a, r),
+                        ..
+                    }) => (a, r),
+                    Variable::Global(AstType::Function(a, r)) => (a, r),
                     _ => return Err(TypeError::NotCallable(name.clone())),
                 };
-                if args_t != *func_args_t {
-                    todo!();
+                if args_t != func_args_t {
+                    return Err(TypeError::BadCallSignature(name.clone()));
                 }
                 *ret_t.clone()
             }

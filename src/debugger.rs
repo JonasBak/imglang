@@ -150,12 +150,12 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
             3
         }
         op @ OpCode::Call => {
-            print_binary(
-                op,
-                chunk.get_op_u16(ip + 1) as u64,
-                chunk.get_op(ip + 3) as u64,
-            );
-            4
+            print_unary(op, chunk.get_op(ip + 1) as u64);
+            2
+        }
+        op @ OpCode::PushU16 => {
+            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
+            3
         }
     }
 }

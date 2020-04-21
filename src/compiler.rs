@@ -1,27 +1,40 @@
 use super::*;
+use std::collections::HashMap;
 use std::mem;
 
 #[derive(Debug, Clone)]
-struct Variable {
+struct LocalVariable {
     name: String,
     depth: u16,
     offset: u16,
     t: AstType,
 }
+#[derive(Debug, Clone)]
+enum GlobalVariable {
+    Function(u16, u8),
+}
+enum Variable {
+    Local(LocalVariable),
+    Global(GlobalVariable),
+}
 pub struct Compiler {
-    variables: Vec<Variable>,
+    variables: Vec<LocalVariable>,
+    globals: HashMap<String, GlobalVariable>,
     current_scope_depth: u16,
     chunks: Vec<Chunk>,
     current_chunk: usize,
+    is_root: bool,
 }
 
 impl Compiler {
     pub fn compile(ast: &Ast) -> Vec<Chunk> {
         let mut compiler = Compiler {
             variables: vec![],
+            globals: HashMap::new(),
             current_scope_depth: 0,
             chunks: vec![Chunk::new()],
             current_chunk: 0,
+            is_root: true,
         };
         compiler.codegen(ast);
         compiler.chunks
@@ -30,7 +43,7 @@ impl Compiler {
         &mut self.chunks[self.current_chunk]
     }
     fn declare_variable(&mut self, name: &String, t: AstType) {
-        self.variables.push(Variable {
+        self.variables.push(LocalVariable {
             name: name.clone(),
             depth: self.current_scope_depth,
             offset: self
@@ -43,11 +56,17 @@ impl Compiler {
         });
     }
     fn resolve_variable(&mut self, name: &String) -> Option<Variable> {
-        self.variables
+        let local = self
+            .variables
             .iter_mut()
             .rev()
             .find(|v| &v.name == name)
             .cloned()
+            .map(|v| Variable::Local(v));
+        if local.is_some() {
+            return local;
+        }
+        self.globals.get(name).map(|v| Variable::Global(v.clone()))
     }
     fn pop_variables(&mut self) {
         while self.variables.last().map(|v| v.depth).unwrap_or(0) > self.current_scope_depth {
@@ -86,29 +105,58 @@ impl Compiler {
                 self.codegen(expr);
                 self.declare_variable(name, t.clone().unwrap());
             }
+            Ast::FuncDeclaration(name, func, args, ret_t) => {
+                // this check can be removed as it is checked in typecheking
+                if self.is_root && self.current_scope_depth == 0 {
+                    self.globals.insert(
+                        name.clone(),
+                        GlobalVariable::Function(
+                            self.chunks.len() as u16,
+                            args.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8,
+                        ),
+                    );
+                }
+                self.codegen(func);
+                self.chunk().push_op(OpCode::PopU16 as u8);
+            }
             Ast::Variable(name, t) => {
                 let v = self
                     .resolve_variable(name)
                     .expect("TODO could not resolve variable");
-                match t.as_ref().unwrap() {
-                    AstType::Bool => self.chunk().push_op(OpCode::VariableU8 as u8),
-                    AstType::Function { .. } => self.chunk().push_op(OpCode::VariableU16 as u8),
-                    AstType::Float => self.chunk().push_op(OpCode::VariableU64 as u8),
-                    _ => todo!(),
-                };
-                self.chunk().push_op_u16(v.offset);
+                match v {
+                    Variable::Local(v) => {
+                        match t.as_ref().unwrap() {
+                            AstType::Bool => self.chunk().push_op(OpCode::VariableU8 as u8),
+                            AstType::Function { .. } => {
+                                self.chunk().push_op(OpCode::VariableU16 as u8)
+                            }
+                            AstType::Float => self.chunk().push_op(OpCode::VariableU64 as u8),
+                            _ => todo!(),
+                        };
+                        self.chunk().push_op_u16(v.offset);
+                    }
+                    Variable::Global(GlobalVariable::Function(chunk_i, _)) => {
+                        self.chunk().push_op(OpCode::PushU16 as u8);
+                        self.chunk().push_op_u16(chunk_i);
+                    }
+                }
             }
             Ast::Assign(name, expr, t) => {
                 self.codegen(expr);
                 let v = self
                     .resolve_variable(name)
                     .expect("TODO could not resolve variable");
-                match t.as_ref().unwrap() {
-                    AstType::Bool => self.chunk().push_op(OpCode::AssignU8 as u8),
-                    AstType::Float => self.chunk().push_op(OpCode::AssignU64 as u8),
-                    _ => todo!(),
-                };
-                self.chunk().push_op_u16(v.offset);
+                match v {
+                    Variable::Local(v) => {
+                        match t.as_ref().unwrap() {
+                            AstType::Bool => self.chunk().push_op(OpCode::AssignU8 as u8),
+                            AstType::Float => self.chunk().push_op(OpCode::AssignU64 as u8),
+                            _ => todo!(),
+                        };
+                        self.chunk().push_op_u16(v.offset);
+                    }
+                    _ => panic!(),
+                }
             }
             Ast::If(expr, stmt, else_stmt) => {
                 self.codegen(expr);
@@ -163,7 +211,9 @@ impl Compiler {
 
                 let old_variables = mem::replace(&mut self.variables, vec![]);
                 let old_depth = self.current_scope_depth;
+                let old_is_root = self.is_root;
                 self.current_scope_depth = 0;
+                self.is_root = false;
 
                 for arg in args.iter() {
                     self.declare_variable(&arg.0, arg.1.clone());
@@ -174,6 +224,7 @@ impl Compiler {
 
                 mem::replace(&mut self.variables, old_variables);
                 self.current_scope_depth = old_depth;
+                self.is_root = old_is_root;
 
                 let c = self.current_chunk as u16;
 
@@ -186,19 +237,28 @@ impl Compiler {
                 let v = self
                     .resolve_variable(name)
                     .expect("TODO could not resolve variable");
-                let args_width = match v.t {
-                    AstType::Function(args, _) => {
-                        args.iter().map(|t| t.size()).fold(0, |a, b| a + b)
-                    }
-                    _ => panic!(),
-                };
 
                 for arg in args.iter() {
                     self.codegen(arg);
                 }
+
+                let args_width = match v {
+                    Variable::Local(v) => match &v.t {
+                        AstType::Function(args, _) => {
+                            self.chunk().push_op(OpCode::VariableU16 as u8);
+                            self.chunk().push_op_u16(v.offset);
+                            args.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8
+                        }
+                        _ => panic!(),
+                    },
+                    Variable::Global(GlobalVariable::Function(chunk_i, args_width)) => {
+                        self.chunk().push_op(OpCode::PushU16 as u8);
+                        self.chunk().push_op_u16(chunk_i);
+                        args_width
+                    }
+                };
                 self.chunk().push_op(OpCode::Call as u8);
-                self.chunk().push_op_u16(v.offset);
-                self.chunk().push_op(args_width as u8);
+                self.chunk().push_op(args_width);
             }
             Ast::Float(n) => {
                 let i = self.chunk().add_const_f64(*n);

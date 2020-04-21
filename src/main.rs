@@ -18,8 +18,12 @@ use vm::*;
 
 fn main() {
     let source = "
+        fun hehe(c) 1 + c
         var a = fun(c) c + 9 + 8 + 3;
         var b = 1;
+        fun lol() hehe(1)
+        print lol();
+        fun hehe() 1
         b = a(10) / 2;
         print b;
         a(5);

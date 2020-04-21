@@ -103,6 +103,11 @@ impl VM {
                 OpCode::Nil => self.push_nil(),
                 OpCode::True => self.push_bool(true),
                 OpCode::False => self.push_bool(false),
+                OpCode::PushU16 => {
+                    let data = chunk.get_op_u16(ip);
+                    ip += 2;
+                    self.push_u16(data);
+                }
                 OpCode::PopU8 => {
                     self.pop_u8();
                 }
@@ -182,10 +187,9 @@ impl VM {
                     self.push_u16(chunk);
                 }
                 OpCode::Call => {
-                    let chunk_offset = chunk.get_op_u16(ip);
-                    let args_width = chunk.get_op(ip + 2);
-                    ip += 3;
-                    let chunk_i = self.peek_u16(chunk_offset as usize + frame_offset);
+                    let args_width = chunk.get_op(ip);
+                    ip += 1;
+                    let chunk_i = self.pop_u16();
 
                     self.call_frames.push(CallFrame {
                         parent_ip: ip,
