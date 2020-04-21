@@ -101,6 +101,27 @@ impl Compiler {
                 };
                 push_op_u16(chunk, v.offset);
             }
+            Ast::If(expr, stmt, else_stmt) => {
+                self.codegen(expr, chunk);
+
+                push_op(chunk, OpCode::JumpIfFalse as u8);
+                let else_jump = push_op_u16(chunk, 0);
+                push_op(chunk, OpCode::PopU8 as u8);
+
+                self.codegen(stmt, chunk);
+
+                push_op(chunk, OpCode::Jump as u8);
+                let if_jump = push_op_u16(chunk, 0);
+
+                backpatch_jump(chunk, else_jump);
+                push_op(chunk, OpCode::PopU8 as u8);
+
+                if let Some(else_stmt) = else_stmt {
+                    self.codegen(else_stmt, chunk);
+                }
+
+                backpatch_jump(chunk, if_jump);
+            }
             Ast::ExprStatement(expr, t) => {
                 self.codegen(expr, chunk);
                 match t.unwrap() {

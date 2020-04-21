@@ -1,4 +1,3 @@
-use super::compiler::*;
 use super::*;
 
 macro_rules! expr {
@@ -54,6 +53,9 @@ pub fn run_vm(mut chunk: Chunk) {
             OpCode::True => push_bool(&mut chunk, true),
             OpCode::False => push_bool(&mut chunk, false),
             OpCode::PopU8 => pop_nil(&mut chunk),
+            OpCode::PopU16 => {
+                pop_u16(&mut chunk);
+            }
             OpCode::PopU64 => {
                 pop_f64(&mut chunk);
             }
@@ -102,6 +104,18 @@ pub fn run_vm(mut chunk: Chunk) {
                 let top = chunk.len_stack() - 8;
                 let v = peek_u64(&mut chunk, top);
                 set_u64(&mut chunk, v, i as usize);
+            }
+            OpCode::JumpIfFalse => {
+                let offset = get_op_u16(&mut chunk, ip);
+                ip += 2;
+                let top = chunk.len_stack() - 1;
+                let v = peek_bool(&mut chunk, top);
+                if !v {
+                    ip = offset as usize;
+                }
+            }
+            OpCode::Jump => {
+                ip = get_op_u16(&mut chunk, ip) as usize;
             }
         }
     }

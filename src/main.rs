@@ -16,11 +16,11 @@ use vm::*;
 
 fn main() {
     let source = "
-        var a = 1;
-        {
-            var a = a + a;
-            var a = a + a;
-            print a;
+        var a = 123;
+        if (a > 100) {
+            a = a + 1;
+        } else {
+            a = 1;
         }
         print a;
         "

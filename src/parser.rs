@@ -10,6 +10,8 @@ pub enum Ast {
     Variable(String, Option<AstType>),
     Assign(String, Box<Ast>, Option<AstType>),
 
+    If(Box<Ast>, Box<Ast>, Option<Box<Ast>>),
+
     ExprStatement(Box<Ast>, Option<AstType>),
 
     Float(f64),
@@ -292,6 +294,10 @@ fn statement(lexer: &mut Lexer) -> ParserResult<Ast> {
             lexer.next();
             block(lexer)
         }
+        TokenType::If => {
+            lexer.next();
+            if_statement(lexer)
+        }
         _ => expression_statement(lexer),
     }
 }
@@ -304,6 +310,25 @@ fn print_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
         "expected ';' after print statement",
     )?;
     Ok(Ast::Print(Box::new(expr), None))
+}
+
+fn if_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    consume(lexer, |t| t == &TokenType::LeftPar, "expected '(' after if")?;
+    let expr = expression(lexer)?;
+    consume(
+        lexer,
+        |t| t == &TokenType::RightPar,
+        "expected ')' after condition",
+    )?;
+    let stmt = statement(lexer)?;
+    let else_stmt = match lexer.current_t() {
+        TokenType::Else => {
+            lexer.next();
+            Some(Box::new(statement(lexer)?))
+        }
+        _ => None,
+    };
+    Ok(Ast::If(Box::new(expr), Box::new(stmt), else_stmt))
 }
 
 fn block(lexer: &mut Lexer) -> ParserResult<Ast> {

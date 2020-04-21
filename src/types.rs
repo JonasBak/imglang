@@ -95,6 +95,17 @@ impl TypeChecker {
                 t.replace(expr_t);
                 v_t
             }
+            Ast::If(expr, stmt, else_stmt) => {
+                let expr_t = self.annotate_type(expr)?;
+                if expr_t != AstType::Bool {
+                    return Err(TypeError::NotAllowed(expr_t));
+                }
+                self.annotate_type(stmt)?;
+                if let Some(else_stmt) = else_stmt {
+                    self.annotate_type(else_stmt)?;
+                }
+                AstType::Nil
+            }
             Ast::ExprStatement(expr, t) => {
                 let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t);

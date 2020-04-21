@@ -27,6 +27,7 @@ generate_opcodes!(
     True,
     False,
     PopU8,
+    PopU16,
     PopU64,
     Not,
     EqualU8,
@@ -39,6 +40,8 @@ generate_opcodes!(
     VariableU64,
     AssignU8,
     AssignU64,
+    JumpIfFalse,
+    Jump,
 );
 
 pub struct Chunk {
@@ -92,6 +95,11 @@ pub fn get_op_u32(chunk: &Chunk, ip: usize) -> u32 {
     u32::from_le_bytes(chunk.code[ip..ip + 4].try_into().unwrap())
 }
 
+pub fn backpatch_jump(chunk: &mut Chunk, offset: usize) {
+    let top = chunk.code.len() as u16;
+    chunk.code[offset..offset + 2].copy_from_slice(&top.to_le_bytes());
+}
+
 // add value to constants array, returns index used
 // to load value with constant opcodes
 // called by compiler
@@ -139,6 +147,13 @@ pub fn pop_u8(chunk: &mut Chunk) -> u8 {
     chunk.stack.pop().unwrap()
 }
 
+pub fn pop_u16(chunk: &mut Chunk) -> u16 {
+    let l = chunk.stack.len() - 2;
+    let v = u16::from_le_bytes(chunk.stack[l..].try_into().unwrap());
+    chunk.stack.truncate(l);
+    v
+}
+
 pub fn peek_u64(chunk: &mut Chunk, i: usize) -> u64 {
     u64::from_le_bytes(chunk.stack[i..i + 8].try_into().unwrap())
 }
@@ -155,6 +170,9 @@ pub fn pop_u64(chunk: &mut Chunk) -> u64 {
     v
 }
 
+pub fn peek_bool(chunk: &mut Chunk, i: usize) -> bool {
+    chunk.stack[i] != 0
+}
 pub fn push_bool(chunk: &mut Chunk, data: bool) {
     chunk.stack.push(data as u8);
 }

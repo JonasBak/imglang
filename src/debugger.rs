@@ -107,6 +107,7 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
         op @ OpCode::True => print_simple(op),
         op @ OpCode::False => print_simple(op),
         op @ OpCode::PopU8 => print_simple(op),
+        op @ OpCode::PopU16 => print_simple(op),
         op @ OpCode::PopU64 => print_simple(op),
         op @ OpCode::Not => print_simple(op),
         op @ OpCode::EqualU8 => print_simple(op),
@@ -128,6 +129,14 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
             3
         }
         op @ OpCode::AssignU64 => {
+            print_unary(op, get_op_u16(chunk, ip + 1) as u64);
+            3
+        }
+        op @ OpCode::JumpIfFalse => {
+            print_unary(op, get_op_u16(chunk, ip + 1) as u64);
+            3
+        }
+        op @ OpCode::Jump => {
             print_unary(op, get_op_u16(chunk, ip + 1) as u64);
             3
         }
