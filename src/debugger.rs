@@ -63,18 +63,20 @@ impl fmt::Display for OpCode {
     }
 }
 
-pub fn disassemble_chunk(chunk: &Chunk) {
-    println!("{:*^64}", "BYTECODE");
-    let mut ip = 0;
-    while ip < chunk.len_code() {
-        print!("{:0>6}\t", ip);
-        ip += disassemble(chunk, ip);
-    }
-    println!("{:*^64}", "DATA");
-    for i in 0..chunk.len_data() / 8 {
-        let p = i * 8;
-        println!("{:0>6}\t\t\t\tu64{: >24}", p, chunk.get_const_u64(p as u16));
-        println!("\t\t\t\tf64{: >24}", chunk.get_const_f64(p as u16));
+pub fn disassemble_chunk(chunks: &Vec<Chunk>) {
+    for (i, chunk) in chunks.iter().enumerate() {
+        println!("{:*^64}", format!("BYTECODE CHUNK {}", i));
+        let mut ip = 0;
+        while ip < chunk.len_code() {
+            print!("{:0>6}\t", ip);
+            ip += disassemble(chunk, ip);
+        }
+        println!("{:*^64}", "DATA");
+        for i in 0..chunk.len_data() / 8 {
+            let p = i * 8;
+            println!("{:0>6}\t\t\t\tu64{: >24}", p, chunk.get_const_u64(p as u16));
+            println!("\t\t\t\tf64{: >24}", chunk.get_const_f64(p as u16));
+        }
     }
     println!("{:*^64}", "");
 }
@@ -85,6 +87,9 @@ fn print_simple(op: OpCode) -> usize {
 }
 fn print_unary(op: OpCode, operand: u64) {
     println!("{: >3} {: <24}\t{: >8}", op as u8, op, operand);
+}
+fn print_binary(op: OpCode, op_a: u64, op_b: u64) {
+    println!("{: >3} {: <24}\t{: >8} {: >8}", op as u8, op, op_a, op_b);
 }
 
 pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
@@ -116,6 +121,10 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
             print_unary(op, chunk.get_op_u16(ip + 1) as u64);
             3
         }
+        op @ OpCode::VariableU16 => {
+            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
+            3
+        }
         op @ OpCode::VariableU64 => {
             print_unary(op, chunk.get_op_u16(ip + 1) as u64);
             3
@@ -135,6 +144,18 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
         op @ OpCode::Jump => {
             print_unary(op, chunk.get_op_u16(ip + 1) as u64);
             3
+        }
+        op @ OpCode::Function => {
+            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
+            3
+        }
+        op @ OpCode::Call => {
+            print_binary(
+                op,
+                chunk.get_op_u16(ip + 1) as u64,
+                chunk.get_op(ip + 3) as u64,
+            );
+            4
         }
     }
 }

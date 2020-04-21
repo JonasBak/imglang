@@ -1,5 +1,7 @@
 use super::*;
+use std::mem;
 
+#[derive(Debug, Clone)]
 struct Variable {
     name: String,
     depth: u16,
@@ -9,17 +11,23 @@ struct Variable {
 pub struct Compiler {
     variables: Vec<Variable>,
     current_scope_depth: u16,
+    chunks: Vec<Chunk>,
+    current_chunk: usize,
 }
 
 impl Compiler {
-    pub fn compile(ast: &Ast) -> Chunk {
+    pub fn compile(ast: &Ast) -> Vec<Chunk> {
         let mut compiler = Compiler {
             variables: vec![],
             current_scope_depth: 0,
+            chunks: vec![Chunk::new()],
+            current_chunk: 0,
         };
-        let mut chunk = Chunk::new();
-        compiler.codegen(ast, &mut chunk);
-        chunk
+        compiler.codegen(ast);
+        compiler.chunks
+    }
+    fn chunk(&mut self) -> &mut Chunk {
+        &mut self.chunks[self.current_chunk]
     }
     fn declare_variable(&mut self, name: &String, t: AstType) {
         self.variables.push(Variable {
@@ -29,245 +37,292 @@ impl Compiler {
                 .variables
                 .iter()
                 .last()
-                .map(|v| {
-                    v.offset
-                        + match v.t {
-                            AstType::Bool | AstType::Nil => 1,
-                            AstType::Float => 8,
-                        }
-                })
+                .map(|v| v.offset + v.t.size())
                 .unwrap_or(0),
             t,
         });
     }
-    fn resolve_variable(&mut self, name: &String) -> Option<&Variable> {
-        self.variables.iter().rev().find(|v| &v.name == name)
+    fn resolve_variable(&mut self, name: &String) -> Option<Variable> {
+        self.variables
+            .iter_mut()
+            .rev()
+            .find(|v| &v.name == name)
+            .cloned()
     }
-    fn codegen(&mut self, ast: &Ast, chunk: &mut Chunk) {
+    fn pop_variables(&mut self) {
+        while self.variables.last().map(|v| v.depth).unwrap_or(0) > self.current_scope_depth {
+            match self.variables.pop().unwrap().t {
+                AstType::Bool => self.chunk().push_op(OpCode::PopU8 as u8),
+                AstType::Float => self.chunk().push_op(OpCode::PopU64 as u8),
+                _ => todo!(),
+            };
+        }
+    }
+    fn codegen(&mut self, ast: &Ast) {
         match ast {
             Ast::Program(ps) => {
                 for p in ps.iter() {
-                    self.codegen(p, chunk);
+                    self.codegen(p);
                 }
-                chunk.push_op(OpCode::Return as u8);
+                self.chunk().push_op(OpCode::Return as u8);
             }
             Ast::Block(ps) => {
                 self.current_scope_depth += 1;
                 for p in ps.iter() {
-                    self.codegen(p, chunk);
+                    self.codegen(p);
                 }
                 self.current_scope_depth -= 1;
-                while self.variables.last().map(|v| v.depth).unwrap_or(0) > self.current_scope_depth
-                {
-                    match self.variables.pop().unwrap().t {
-                        AstType::Bool => chunk.push_op(OpCode::PopU8 as u8),
-                        AstType::Float => chunk.push_op(OpCode::PopU64 as u8),
-                        _ => todo!(),
-                    };
-                }
+                self.pop_variables();
             }
             Ast::Print(expr, t) => {
-                self.codegen(expr, chunk);
-                match t.unwrap() {
-                    AstType::Float => chunk.push_op(OpCode::PrintF64 as u8),
-                    AstType::Bool => chunk.push_op(OpCode::PrintBool as u8),
+                self.codegen(expr);
+                match t.as_ref().unwrap() {
+                    AstType::Float => self.chunk().push_op(OpCode::PrintF64 as u8),
+                    AstType::Bool => self.chunk().push_op(OpCode::PrintBool as u8),
                     _ => todo!(),
                 };
             }
             Ast::Declaration(name, expr, t) => {
-                self.codegen(expr, chunk);
-                self.declare_variable(name, t.unwrap());
+                self.codegen(expr);
+                self.declare_variable(name, t.clone().unwrap());
             }
             Ast::Variable(name, t) => {
                 let v = self
                     .resolve_variable(name)
                     .expect("TODO could not resolve variable");
-                match t.unwrap() {
-                    AstType::Bool => chunk.push_op(OpCode::VariableU8 as u8),
-                    AstType::Float => chunk.push_op(OpCode::VariableU64 as u8),
+                match t.as_ref().unwrap() {
+                    AstType::Bool => self.chunk().push_op(OpCode::VariableU8 as u8),
+                    AstType::Function { .. } => self.chunk().push_op(OpCode::VariableU16 as u8),
+                    AstType::Float => self.chunk().push_op(OpCode::VariableU64 as u8),
                     _ => todo!(),
                 };
-                chunk.push_op_u16(v.offset);
+                self.chunk().push_op_u16(v.offset);
             }
             Ast::Assign(name, expr, t) => {
-                self.codegen(expr, chunk);
+                self.codegen(expr);
                 let v = self
                     .resolve_variable(name)
                     .expect("TODO could not resolve variable");
-                match t.unwrap() {
-                    AstType::Bool => chunk.push_op(OpCode::AssignU8 as u8),
-                    AstType::Float => chunk.push_op(OpCode::AssignU64 as u8),
+                match t.as_ref().unwrap() {
+                    AstType::Bool => self.chunk().push_op(OpCode::AssignU8 as u8),
+                    AstType::Float => self.chunk().push_op(OpCode::AssignU64 as u8),
                     _ => todo!(),
                 };
-                chunk.push_op_u16(v.offset);
+                self.chunk().push_op_u16(v.offset);
             }
             Ast::If(expr, stmt, else_stmt) => {
-                self.codegen(expr, chunk);
+                self.codegen(expr);
 
-                chunk.push_op(OpCode::JumpIfFalse as u8);
-                let else_jump = chunk.push_op_u16(0);
-                chunk.push_op(OpCode::PopU8 as u8);
+                self.chunk().push_op(OpCode::JumpIfFalse as u8);
+                let else_jump = self.chunk().push_op_u16(0);
+                self.chunk().push_op(OpCode::PopU8 as u8);
 
-                self.codegen(stmt, chunk);
+                self.codegen(stmt);
 
-                chunk.push_op(OpCode::Jump as u8);
-                let if_jump = chunk.push_op_u16(0);
+                self.chunk().push_op(OpCode::Jump as u8);
+                let if_jump = self.chunk().push_op_u16(0);
 
-                chunk.backpatch_jump(else_jump);
-                chunk.push_op(OpCode::PopU8 as u8);
+                self.chunk().backpatch_jump(else_jump);
+                self.chunk().push_op(OpCode::PopU8 as u8);
 
                 if let Some(else_stmt) = else_stmt {
-                    self.codegen(else_stmt, chunk);
+                    self.codegen(else_stmt);
                 }
 
-                chunk.backpatch_jump(if_jump);
+                self.chunk().backpatch_jump(if_jump);
             }
             Ast::While(expr, stmt) => {
-                let loop_start = chunk.len_code();
+                let loop_start = self.chunk().len_code();
 
-                self.codegen(expr, chunk);
+                self.codegen(expr);
 
-                chunk.push_op(OpCode::JumpIfFalse as u8);
-                let done_jump = chunk.push_op_u16(0);
-                chunk.push_op(OpCode::PopU8 as u8);
+                self.chunk().push_op(OpCode::JumpIfFalse as u8);
+                let done_jump = self.chunk().push_op_u16(0);
+                self.chunk().push_op(OpCode::PopU8 as u8);
 
-                self.codegen(stmt, chunk);
+                self.codegen(stmt);
 
-                chunk.push_op(OpCode::Jump as u8);
-                chunk.push_op_u16(loop_start as u16);
+                self.chunk().push_op(OpCode::Jump as u8);
+                self.chunk().push_op_u16(loop_start as u16);
 
-                chunk.backpatch_jump(done_jump);
-                chunk.push_op(OpCode::PopU8 as u8);
+                self.chunk().backpatch_jump(done_jump);
+                self.chunk().push_op(OpCode::PopU8 as u8);
             }
             Ast::ExprStatement(expr, t) => {
-                self.codegen(expr, chunk);
-                match t.unwrap() {
-                    AstType::Bool => chunk.push_op(OpCode::PopU8 as u8),
-                    AstType::Float => chunk.push_op(OpCode::PopU64 as u8),
+                self.codegen(expr);
+                match t.as_ref().unwrap() {
+                    AstType::Bool => self.chunk().push_op(OpCode::PopU8 as u8),
+                    AstType::Float => self.chunk().push_op(OpCode::PopU64 as u8),
                     _ => todo!(),
                 };
             }
+            Ast::Function { body, args, .. } => {
+                let prev_chunk = self.current_chunk;
+                self.chunks.push(Chunk::new());
+                self.current_chunk = self.chunks.len() - 1;
+
+                let old_variables = mem::replace(&mut self.variables, vec![]);
+                let old_depth = self.current_scope_depth;
+                self.current_scope_depth = 0;
+
+                for arg in args.iter() {
+                    self.declare_variable(&arg.0, arg.1.clone());
+                }
+
+                self.codegen(body);
+                self.chunk().push_op(OpCode::Return as u8);
+
+                mem::replace(&mut self.variables, old_variables);
+                self.current_scope_depth = old_depth;
+
+                let c = self.current_chunk as u16;
+
+                self.current_chunk = prev_chunk;
+
+                self.chunk().push_op(OpCode::Function as u8);
+                self.chunk().push_op_u16(c);
+            }
+            Ast::Call(name, args) => {
+                let v = self
+                    .resolve_variable(name)
+                    .expect("TODO could not resolve variable");
+                let args_width = match v.t {
+                    AstType::Function(args, _) => {
+                        args.iter().map(|t| t.size()).fold(0, |a, b| a + b)
+                    }
+                    _ => panic!(),
+                };
+
+                for arg in args.iter() {
+                    self.codegen(arg);
+                }
+                self.chunk().push_op(OpCode::Call as u8);
+                self.chunk().push_op_u16(v.offset);
+                self.chunk().push_op(args_width as u8);
+            }
             Ast::Float(n) => {
-                let i = chunk.add_const_f64(*n);
-                chunk.push_op(OpCode::ConstantF64 as u8);
-                chunk.push_op_u16(i);
+                let i = self.chunk().add_const_f64(*n);
+                self.chunk().push_op(OpCode::ConstantF64 as u8);
+                self.chunk().push_op_u16(i);
             }
             Ast::Bool(a) => {
                 match a {
-                    true => chunk.push_op(OpCode::True as u8),
-                    false => chunk.push_op(OpCode::False as u8),
+                    true => self.chunk().push_op(OpCode::True as u8),
+                    false => self.chunk().push_op(OpCode::False as u8),
                 };
             }
             Ast::Nil => {
-                chunk.push_op(OpCode::Nil as u8);
+                self.chunk().push_op(OpCode::Nil as u8);
             }
             Ast::Negate(n) => {
-                self.codegen(n, chunk);
-                chunk.push_op(OpCode::NegateF64 as u8);
+                self.codegen(n);
+                self.chunk().push_op(OpCode::NegateF64 as u8);
             }
             Ast::Not(n) => {
-                self.codegen(n, chunk);
-                chunk.push_op(OpCode::Not as u8);
+                self.codegen(n);
+                self.chunk().push_op(OpCode::Not as u8);
             }
             Ast::Multiply(l, r, _) => {
-                self.codegen(l, chunk);
-                self.codegen(r, chunk);
-                chunk.push_op(OpCode::MultiplyF64 as u8);
+                self.codegen(l);
+                self.codegen(r);
+                self.chunk().push_op(OpCode::MultiplyF64 as u8);
             }
             Ast::Divide(l, r, _) => {
-                self.codegen(l, chunk);
-                self.codegen(r, chunk);
-                chunk.push_op(OpCode::DivideF64 as u8);
+                self.codegen(l);
+                self.codegen(r);
+                self.chunk().push_op(OpCode::DivideF64 as u8);
             }
             Ast::Add(l, r, _) => {
-                self.codegen(l, chunk);
-                self.codegen(r, chunk);
-                chunk.push_op(OpCode::AddF64 as u8);
+                self.codegen(l);
+                self.codegen(r);
+                self.chunk().push_op(OpCode::AddF64 as u8);
             }
             Ast::Sub(l, r, _) => {
-                self.codegen(l, chunk);
-                self.codegen(r, chunk);
-                chunk.push_op(OpCode::SubF64 as u8);
+                self.codegen(l);
+                self.codegen(r);
+                self.chunk().push_op(OpCode::SubF64 as u8);
             }
             Ast::Equal(l, r, t) => {
-                self.codegen(l, chunk);
-                self.codegen(r, chunk);
-                match t.unwrap() {
-                    AstType::Nil | AstType::Bool => chunk.push_op(OpCode::EqualU8 as u8),
-                    AstType::Float => chunk.push_op(OpCode::EqualU64 as u8),
+                self.codegen(l);
+                self.codegen(r);
+                match t.as_ref().unwrap() {
+                    AstType::Nil | AstType::Bool => self.chunk().push_op(OpCode::EqualU8 as u8),
+                    AstType::Float => self.chunk().push_op(OpCode::EqualU64 as u8),
+                    _ => todo!(),
                 };
             }
             Ast::NotEqual(l, r, t) => {
-                self.codegen(l, chunk);
-                self.codegen(r, chunk);
-                match t.unwrap() {
-                    AstType::Nil | AstType::Bool => chunk.push_op(OpCode::EqualU8 as u8),
-                    AstType::Float => chunk.push_op(OpCode::EqualU64 as u8),
+                self.codegen(l);
+                self.codegen(r);
+                match t.as_ref().unwrap() {
+                    AstType::Nil | AstType::Bool => self.chunk().push_op(OpCode::EqualU8 as u8),
+                    AstType::Float => self.chunk().push_op(OpCode::EqualU64 as u8),
+                    _ => todo!(),
                 };
-                chunk.push_op(OpCode::Not as u8);
+                self.chunk().push_op(OpCode::Not as u8);
             }
             Ast::Greater(l, r, t) => {
-                self.codegen(l, chunk);
-                self.codegen(r, chunk);
-                match t.unwrap() {
-                    AstType::Float => chunk.push_op(OpCode::GreaterF64 as u8),
+                self.codegen(l);
+                self.codegen(r);
+                match t.as_ref().unwrap() {
+                    AstType::Float => self.chunk().push_op(OpCode::GreaterF64 as u8),
                     _ => panic!(),
                 };
             }
             Ast::GreaterEqual(l, r, t) => {
-                self.codegen(r, chunk);
-                self.codegen(l, chunk);
-                match t.unwrap() {
-                    AstType::Float => chunk.push_op(OpCode::LesserF64 as u8),
+                self.codegen(r);
+                self.codegen(l);
+                match t.as_ref().unwrap() {
+                    AstType::Float => self.chunk().push_op(OpCode::LesserF64 as u8),
                     _ => panic!(),
                 };
-                chunk.push_op(OpCode::Not as u8);
+                self.chunk().push_op(OpCode::Not as u8);
             }
             Ast::Lesser(l, r, t) => {
-                self.codegen(l, chunk);
-                self.codegen(r, chunk);
-                match t.unwrap() {
-                    AstType::Float => chunk.push_op(OpCode::LesserF64 as u8),
+                self.codegen(l);
+                self.codegen(r);
+                match t.as_ref().unwrap() {
+                    AstType::Float => self.chunk().push_op(OpCode::LesserF64 as u8),
                     _ => panic!(),
                 };
             }
             Ast::LesserEqual(l, r, t) => {
-                self.codegen(r, chunk);
-                self.codegen(l, chunk);
-                match t.unwrap() {
-                    AstType::Float => chunk.push_op(OpCode::GreaterF64 as u8),
+                self.codegen(r);
+                self.codegen(l);
+                match t.as_ref().unwrap() {
+                    AstType::Float => self.chunk().push_op(OpCode::GreaterF64 as u8),
                     _ => panic!(),
                 };
-                chunk.push_op(OpCode::Not as u8);
+                self.chunk().push_op(OpCode::Not as u8);
             }
             Ast::And(l, r) => {
-                self.codegen(l, chunk);
+                self.codegen(l);
 
-                chunk.push_op(OpCode::JumpIfFalse as u8);
-                let false_jump = chunk.push_op_u16(0);
+                self.chunk().push_op(OpCode::JumpIfFalse as u8);
+                let false_jump = self.chunk().push_op_u16(0);
 
-                chunk.push_op(OpCode::PopU8 as u8);
+                self.chunk().push_op(OpCode::PopU8 as u8);
 
-                self.codegen(r, chunk);
+                self.codegen(r);
 
-                chunk.backpatch_jump(false_jump);
+                self.chunk().backpatch_jump(false_jump);
             }
             Ast::Or(l, r) => {
-                self.codegen(l, chunk);
+                self.codegen(l);
 
-                chunk.push_op(OpCode::JumpIfFalse as u8);
-                let false_jump = chunk.push_op_u16(0);
+                self.chunk().push_op(OpCode::JumpIfFalse as u8);
+                let false_jump = self.chunk().push_op_u16(0);
 
-                chunk.push_op(OpCode::Jump as u8);
-                let true_jump = chunk.push_op_u16(0);
+                self.chunk().push_op(OpCode::Jump as u8);
+                let true_jump = self.chunk().push_op_u16(0);
 
-                chunk.backpatch_jump(false_jump);
+                self.chunk().backpatch_jump(false_jump);
 
-                chunk.push_op(OpCode::PopU8 as u8);
+                self.chunk().push_op(OpCode::PopU8 as u8);
 
-                self.codegen(r, chunk);
+                self.codegen(r);
 
-                chunk.backpatch_jump(true_jump);
+                self.chunk().backpatch_jump(true_jump);
             }
         }
     }

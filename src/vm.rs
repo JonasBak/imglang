@@ -14,26 +14,65 @@ macro_rules! binary_op_f64{
     }}
 }
 
+struct CallFrame {
+    parent_ip: usize,
+    parent_chunk: usize,
+    parent_frame_offset: usize,
+    args_width: u8,
+}
+
 pub struct VM {
     stack: Vec<u8>,
+    chunks: Vec<Chunk>,
+    call_frames: Vec<CallFrame>,
 }
 
 impl VM {
-    pub fn new() -> VM {
-        VM { stack: vec![] }
+    pub fn new(chunks: Vec<Chunk>) -> VM {
+        VM {
+            stack: vec![],
+            chunks,
+            call_frames: vec![],
+        }
     }
     pub fn len_stack(&self) -> usize {
         self.stack.len()
     }
-    pub fn run(&mut self, chunk: Chunk) {
+    pub fn run(&mut self) {
         let mut ip = 0;
+        let mut current_chunk = 0;
+        let mut frame_offset = 0;
         loop {
-            print!("{:0>6}\tstack: {: >6}\t", ip, self.len_stack());
+            let chunk = &self.chunks[current_chunk];
+            print!(
+                "{:0>6}\tchunk:{: >3} stack:{: >4}\t",
+                ip,
+                current_chunk,
+                self.len_stack()
+            );
             disassemble(&chunk, ip);
             ip = ip + 1;
             match OpCode::from(chunk.get_op(ip - 1)) {
                 OpCode::Return => {
-                    return;
+                    if self.call_frames.len() == 0 {
+                        return;
+                    }
+
+                    let CallFrame {
+                        parent_ip,
+                        parent_chunk,
+                        parent_frame_offset,
+                        args_width,
+                    } = self.call_frames.pop().unwrap();
+
+                    let return_width = self.stack.len() - frame_offset - args_width as usize;
+                    self.stack
+                        .copy_within(frame_offset + args_width as usize.., frame_offset);
+                    self.stack.truncate(frame_offset + return_width);
+
+                    ip = parent_ip;
+                    current_chunk = parent_chunk;
+                    frame_offset = parent_frame_offset;
                 }
                 OpCode::PrintF64 => {
                     let a = self.pop_f64();
@@ -96,13 +135,19 @@ impl VM {
                 OpCode::VariableU8 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
-                    let v = self.peek_u8(i as usize);
+                    let v = self.peek_u8(i as usize + frame_offset);
                     self.push_u8(v);
+                }
+                OpCode::VariableU16 => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let v = self.peek_u16(i as usize + frame_offset);
+                    self.push_u16(v);
                 }
                 OpCode::VariableU64 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
-                    let v = self.peek_u64(i as usize);
+                    let v = self.peek_u64(i as usize + frame_offset);
                     self.push_u64(v);
                 }
                 OpCode::AssignU8 => {
@@ -110,14 +155,14 @@ impl VM {
                     ip += 2;
                     let top = self.len_stack() - 1;
                     let v = self.peek_u8(top);
-                    self.set_u8(v, i as usize);
+                    self.set_u8(v, i as usize + frame_offset);
                 }
                 OpCode::AssignU64 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
                     let top = self.len_stack() - 8;
                     let v = self.peek_u64(top);
-                    self.set_u64(v, i as usize);
+                    self.set_u64(v, i as usize + frame_offset);
                 }
                 OpCode::JumpIfFalse => {
                     let offset = chunk.get_op_u16(ip);
@@ -130,6 +175,27 @@ impl VM {
                 }
                 OpCode::Jump => {
                     ip = chunk.get_op_u16(ip) as usize;
+                }
+                OpCode::Function => {
+                    let chunk = chunk.get_op_u16(ip);
+                    ip += 2;
+                    self.push_u16(chunk);
+                }
+                OpCode::Call => {
+                    let chunk_offset = chunk.get_op_u16(ip);
+                    let args_width = chunk.get_op(ip + 2);
+                    ip += 3;
+                    let chunk_i = self.peek_u16(chunk_offset as usize + frame_offset);
+
+                    self.call_frames.push(CallFrame {
+                        parent_ip: ip,
+                        parent_chunk: current_chunk,
+                        parent_frame_offset: frame_offset,
+                        args_width,
+                    });
+                    current_chunk = chunk_i as usize;
+                    ip = 0;
+                    frame_offset = self.len_stack() - args_width as usize;
                 }
             }
         }
@@ -157,6 +223,12 @@ impl VM {
         self.stack.pop().unwrap()
     }
 
+    pub fn peek_u16(&mut self, i: usize) -> u16 {
+        u16::from_le_bytes(self.stack[i..i + 2].try_into().unwrap())
+    }
+    pub fn push_u16(&mut self, data: u16) {
+        self.stack.extend_from_slice(&data.to_le_bytes());
+    }
     pub fn pop_u16(&mut self) -> u16 {
         let l = self.stack.len() - 2;
         let v = u16::from_le_bytes(self.stack[l..].try_into().unwrap());

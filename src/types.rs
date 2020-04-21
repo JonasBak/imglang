@@ -1,16 +1,29 @@
 use super::*;
+use std::mem;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AstType {
+    Function(Vec<AstType>, Box<AstType>),
+
     Float,
     Bool,
     Nil,
+}
+impl AstType {
+    pub fn size(&self) -> u16 {
+        match self {
+            AstType::Bool | AstType::Nil => 1,
+            AstType::Float => 8,
+            AstType::Function { .. } => 2,
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
     NotAllowed(AstType),
     Mismatch(AstType, AstType),
     NotDefined(String),
+    NotCallable(String),
 }
 
 struct Variable {
@@ -72,7 +85,7 @@ impl TypeChecker {
             }
             Ast::Declaration(name, expr, t) => {
                 let expr_t = self.annotate_type(expr)?;
-                t.replace(expr_t);
+                t.replace(expr_t.clone());
                 self.declare_variable(name, expr_t);
                 AstType::Nil
             }
@@ -80,14 +93,15 @@ impl TypeChecker {
                 let v = self
                     .resolve_variable(name)
                     .ok_or(TypeError::NotDefined(name.clone()))?;
-                t.replace(v.t);
-                v.t
+                t.replace(v.t.clone());
+                v.t.clone()
             }
             Ast::Assign(name, expr, t) => {
                 let v_t = self
                     .resolve_variable(name)
                     .ok_or(TypeError::NotDefined(name.clone()))?
-                    .t;
+                    .t
+                    .clone();
                 let expr_t = self.annotate_type(expr)?;
                 if v_t != expr_t {
                     return Err(TypeError::Mismatch(v_t, expr_t));
@@ -119,6 +133,48 @@ impl TypeChecker {
                 t.replace(expr_t);
                 AstType::Nil
             }
+            Ast::Function { body, args, ret_t } => {
+                let old_variables = mem::replace(&mut self.variables, vec![]);
+                let old_depth = self.current_scope_depth;
+                self.current_scope_depth = 0;
+
+                for arg in args.iter() {
+                    self.declare_variable(&arg.0, arg.1.clone());
+                }
+
+                let body_t = self.annotate_type(body)?;
+
+                mem::replace(&mut self.variables, old_variables);
+                self.current_scope_depth = old_depth;
+
+                if *ret_t != body_t {
+                    return Err(TypeError::Mismatch(ret_t.clone(), body_t));
+                }
+
+                AstType::Function(
+                    args.iter().map(|t| t.1.clone()).collect(),
+                    Box::new(ret_t.clone()),
+                )
+            }
+            Ast::Call(name, args) => {
+                let mut args_t = vec![];
+                for arg in args.iter_mut() {
+                    args_t.push(self.annotate_type(arg)?);
+                }
+                let (func_args_t, ret_t) = match &self
+                    .resolve_variable(name)
+                    .ok_or(TypeError::NotDefined(name.clone()))?
+                    .clone()
+                    .t
+                {
+                    AstType::Function(a, r) => (a, r),
+                    _ => return Err(TypeError::NotCallable(name.clone())),
+                };
+                if args_t != *func_args_t {
+                    todo!();
+                }
+                *ret_t.clone()
+            }
             Ast::Float(_) => AstType::Float,
             Ast::Bool(_) => AstType::Bool,
             Ast::Nil => AstType::Nil,
@@ -136,7 +192,7 @@ impl TypeChecker {
                 if t_l != t_r {
                     return Err(TypeError::Mismatch(t_l, t_r));
                 }
-                t.replace(t_r);
+                t.replace(t_r.clone());
                 t_r
             }
             Ast::Equal(l, r, t)

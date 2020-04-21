@@ -37,13 +37,17 @@ generate_opcodes!(
     PrintF64,
     PrintBool,
     VariableU8,
+    VariableU16,
     VariableU64,
     AssignU8,
     AssignU64,
     JumpIfFalse,
     Jump,
+    Function,
+    Call,
 );
 
+#[derive(Debug)]
 pub struct Chunk {
     code: Vec<u8>,
     data: Vec<u8>,

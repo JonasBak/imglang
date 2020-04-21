@@ -2,6 +2,7 @@ mod chunk;
 mod compiler;
 mod debugger;
 mod lexer;
+mod object;
 mod parser;
 mod types;
 mod vm;
@@ -10,26 +11,22 @@ use chunk::*;
 use compiler::*;
 use debugger::*;
 use lexer::*;
+use object::*;
 use parser::*;
 use types::*;
 use vm::*;
 
 fn main() {
     let source = "
-        var a = 123;
-        if (a > 100) {
-            a = a + 1;
-        } else {
-            a = 1;
-        }
-        print a;
-        true and false and true;
-        false or false or true or false;
-        var b = 0;
-        while (b < 10) {
-            print b;
-            b = b + 1;
-        }
+        var a = fun(c) c + 9 + 8 + 3;
+        var b = 1;
+        b = a(10) / 2;
+        print b;
+        a(5);
+        a(5);
+        a(5);
+        a(5);
+        a(5);
         "
     .to_string();
     let mut lexer = Lexer::new(&source).unwrap();
@@ -42,8 +39,8 @@ fn main() {
     };
     println!("{:?}", ast);
     TypeChecker::annotate_types(&mut ast).unwrap();
-    let chunk = Compiler::compile(&ast);
-    disassemble_chunk(&chunk);
-    let mut vm = VM::new();
-    vm.run(chunk);
+    let chunks = Compiler::compile(&ast);
+    disassemble_chunk(&chunks);
+    let mut vm = VM::new(chunks);
+    vm.run();
 }

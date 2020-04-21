@@ -15,6 +15,13 @@ pub enum Ast {
 
     ExprStatement(Box<Ast>, Option<AstType>),
 
+    Function {
+        body: Box<Ast>,
+        args: Vec<(String, AstType)>,
+        ret_t: AstType,
+    },
+    Call(String, Vec<Ast>),
+
     Float(f64),
     Bool(bool),
     Nil,
@@ -73,7 +80,7 @@ fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool, msg: &'static str) -> P
 
 fn get_rule(t: &TokenType) -> Rule {
     match t {
-        TokenType::LeftPar => (Some(grouping), None, PREC_NONE),
+        TokenType::LeftPar => (Some(grouping), Some(call), PREC_CALL),
         TokenType::Float(_) => (Some(literal), None, PREC_NONE),
         TokenType::Star => (None, Some(binary), PREC_FACTOR),
         TokenType::Slash => (None, Some(binary), PREC_FACTOR),
@@ -92,6 +99,7 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::Identifier(_) => (Some(variable), None, PREC_NONE),
         TokenType::And => (None, Some(logic_and), PREC_AND),
         TokenType::Or => (None, Some(logic_or), PREC_OR),
+        TokenType::Fun => (Some(function), None, PREC_NONE),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -402,4 +410,67 @@ fn while_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
     let stmt = statement(lexer)?;
 
     Ok(Ast::While(Box::new(expr), Box::new(stmt)))
+}
+
+fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
+    consume(
+        lexer,
+        |t| t == &TokenType::LeftPar,
+        "expected '(' before arguments",
+    )?;
+    let mut args = vec![];
+    while lexer.current_t() != TokenType::RightPar {
+        let arg = match lexer.current_t() {
+            TokenType::Identifier(arg) => arg,
+            _ => todo!(),
+        };
+        lexer.next();
+
+        args.push((arg, AstType::Float)); // TODO read type
+
+        if lexer.current_t() != TokenType::Comma {
+            break;
+        }
+        lexer.next();
+    }
+    consume(
+        lexer,
+        |t| t == &TokenType::RightPar,
+        "expected ')' after arguments",
+    )?;
+    let body = if lexer.current_t() == TokenType::LeftBrace {
+        statement(lexer)?
+    } else {
+        expression(lexer)?
+    };
+    Ok(Ast::Function {
+        body: Box::new(body),
+        args,
+        ret_t: AstType::Float, // TODO
+    })
+}
+
+fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
+    let name = match ident {
+        Ast::Variable(name, _) => name,
+        _ => {
+            return Err(ParserError::Unexpected(
+                lexer.prev().unwrap(),
+                "unexpected token when calling function, expected identifier",
+            ))
+        }
+    };
+    let mut args = vec![];
+    while lexer.current_t() != TokenType::RightPar {
+        args.push(expression(lexer)?);
+        if lexer.current_t() == TokenType::Comma {
+            lexer.next();
+        }
+    }
+    consume(
+        lexer,
+        |t| t == &TokenType::RightPar,
+        "expected ')' after arguments",
+    )?;
+    Ok(Ast::Call(name, args))
 }
