@@ -23,16 +23,14 @@ struct CallFrame {
 }
 
 pub struct VM {
-    out: Box<dyn Write>,
     stack: Vec<u8>,
     chunks: Vec<Chunk>,
     call_frames: Vec<CallFrame>,
 }
 
 impl VM {
-    pub fn new(out: Box<dyn Write>, chunks: Vec<Chunk>) -> VM {
+    pub fn new(chunks: Vec<Chunk>) -> VM {
         VM {
-            out,
             stack: vec![],
             chunks,
             call_frames: vec![],
@@ -41,7 +39,7 @@ impl VM {
     pub fn len_stack(&self) -> usize {
         self.stack.len()
     }
-    pub fn run(&mut self) {
+    pub fn run(&mut self, out: &mut dyn Write) {
         let mut ip = 0;
         let mut current_chunk = 0;
         let mut frame_offset = 0;
@@ -83,11 +81,11 @@ impl VM {
                 }
                 OpCode::PrintF64 => {
                     let a = self.pop_f64();
-                    writeln!(*self.out, "{}", a).unwrap();
+                    writeln!(out, "{}", a).unwrap();
                 }
                 OpCode::PrintBool => {
                     let a = self.pop_bool();
-                    writeln!(*self.out, "{}", a).unwrap();
+                    writeln!(out, "{}", a).unwrap();
                 }
                 OpCode::ConstantF64 => {
                     let i = chunk.get_op_u16(ip);

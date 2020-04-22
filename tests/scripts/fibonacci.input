@@ -1,0 +1,11 @@
+fun fib(n float) float {
+  if (n <= 2) {
+    return 1;
+  }
+  return fib(n-1) + fib(n-2);
+}
+var a = 1;
+while (a < 11) {
+  print fib(a);
+  a = a + 1;
+}

@@ -55,6 +55,6 @@ fn main() {
     #[cfg(debug_build)]
     disassemble_chunk(&chunks);
 
-    let mut vm = VM::new(Box::new(stdout()), chunks);
-    vm.run();
+    let mut vm = VM::new(chunks);
+    vm.run(&mut stdout());
 }
