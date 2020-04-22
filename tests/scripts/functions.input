@@ -1,0 +1,51 @@
+// function declaration is global (can be called from body of other function)
+fun test() {
+  print 123;
+}
+
+fun callTest1() {
+  print 321;
+  test();
+}
+
+var callTest2 = fun() {
+  print 444;
+  test();
+};
+
+callTest1();
+callTest2();
+
+// functions can have arguments
+fun argFunc1(a float) {
+  print a;
+}
+argFunc1(555);
+
+var argFunc2 = fun(a float, b bool) {
+  if (b) {
+    print a * 10;
+  } else {
+    print a / 2;
+  }
+};
+argFunc2(20, false);
+
+// functions can return values
+fun moreThan10(a float) bool {
+  return a > 10;
+}
+print moreThan10(10.1);
+
+var times10 = fun(a float) float {
+  return 10 * a;
+};
+print times10(10);
+
+fun returnFunction1() <> {
+  return fun() {
+    print 666;
+  };
+}
+var inner = returnFunction1();
+inner();

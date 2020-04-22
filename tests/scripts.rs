@@ -27,6 +27,16 @@ fn test_script(prefix: &'static str) {
 }
 
 #[test]
+fn variables() {
+    test_script("tests/scripts/variables");
+}
+
+#[test]
+fn functions() {
+    test_script("tests/scripts/functions");
+}
+
+#[test]
 fn fibonacci() {
     test_script("tests/scripts/fibonacci");
 }

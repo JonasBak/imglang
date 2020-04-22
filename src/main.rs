@@ -12,32 +12,27 @@ use compiler::*;
 use debugger::*;
 use lexer::*;
 use parser::*;
+use std::env;
+use std::fs;
 use std::io::stdout;
 use types::*;
 use vm::*;
 
 fn main() {
-    let source = "
-        fun xor(a bool, b bool) bool {
-           return (a or b) and (!a or !b);
+    let mut args = env::args();
+    if args.len() != 2 {
+        eprintln!("usage \"imglang [script]\"");
+        return;
+    }
+    args.next();
+    let source = String::from_utf8(fs::read(args.next().unwrap()).unwrap()).unwrap();
+    let mut lexer = match Lexer::new(&source) {
+        Ok(tokens) => tokens,
+        Err(error) => {
+            print_lexer_err(&source, error);
+            return;
         }
-        print xor(false, true);
-        fun test1() {
-            print 123;
-        }
-        test1();
-        fun test2(a float, b bool) float {
-            if (b) {
-                return a * 10;
-            } else {
-                return a - 2;
-            }
-        }
-        print test2(10, true);
-        print test2(10, false);
-        "
-    .to_string();
-    let mut lexer = Lexer::new(&source).unwrap();
+    };
     let mut ast = match parse(&mut lexer) {
         Ok(ast) => ast,
         Err(error) => {
