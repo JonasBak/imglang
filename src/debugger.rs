@@ -7,13 +7,13 @@ pub fn print_lexer_err(source: &String, error: LexerError) {
         LexerError::Parse(i) => source.insert_str(i, ">>>"),
         LexerError::Unescaped(i) => source.insert_str(i, ">>>"),
     }
-    println!("{}", source);
+    eprintln!("{}", source);
     match error {
         LexerError::Parse(i) => {
-            println!("Error: Could not parse character at position {}", i);
+            eprintln!("Error: Could not parse character at position {}", i);
         }
         LexerError::Unescaped(i) => {
-            println!("Error: Unescaped string starting at {}", i);
+            eprintln!("Error: Unescaped string starting at {}", i);
         }
     }
 }
@@ -65,31 +65,31 @@ impl fmt::Display for OpCode {
 
 pub fn disassemble_chunk(chunks: &Vec<Chunk>) {
     for (i, chunk) in chunks.iter().enumerate() {
-        println!("{:*^64}", format!("BYTECODE CHUNK {}", i));
+        eprintln!("{:*^64}", format!("BYTECODE CHUNK {}", i));
         let mut ip = 0;
         while ip < chunk.len_code() {
-            print!("{:0>6}\t", ip);
+            eprint!("{:0>6}\t", ip);
             ip += disassemble(chunk, ip);
         }
-        println!("{:*^64}", "DATA");
+        eprintln!("{:*^64}", "DATA");
         for i in 0..chunk.len_data() / 8 {
             let p = i * 8;
-            println!("{:0>6}\t\t\t\tu64{: >24}", p, chunk.get_const_u64(p as u16));
-            println!("\t\t\t\tf64{: >24}", chunk.get_const_f64(p as u16));
+            eprintln!("{:0>6}\t\t\t\tu64{: >24}", p, chunk.get_const_u64(p as u16));
+            eprintln!("\t\t\t\tf64{: >24}", chunk.get_const_f64(p as u16));
         }
     }
-    println!("{:*^64}", "");
+    eprintln!("{:*^64}", "");
 }
 
 fn print_simple(op: OpCode) -> usize {
-    println!("{: >3} {: <24}", op as u8, op);
+    eprintln!("{: >3} {: <24}", op as u8, op);
     1
 }
 fn print_unary(op: OpCode, operand: u64) {
-    println!("{: >3} {: <24}\t{: >8}", op as u8, op, operand);
+    eprintln!("{: >3} {: <24}\t{: >8}", op as u8, op, operand);
 }
 fn print_binary(op: OpCode, op_a: u64, op_b: u64) {
-    println!("{: >3} {: <24}\t{: >8} {: >8}", op as u8, op, op_a, op_b);
+    eprintln!("{: >3} {: <24}\t{: >8} {: >8}", op as u8, op, op_a, op_b);
 }
 
 pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {

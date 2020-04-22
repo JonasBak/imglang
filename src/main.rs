@@ -12,6 +12,7 @@ use compiler::*;
 use debugger::*;
 use lexer::*;
 use parser::*;
+use std::io::stdout;
 use types::*;
 use vm::*;
 
@@ -44,10 +45,16 @@ fn main() {
             return;
         }
     };
-    println!("{:?}", ast);
+
+    #[cfg(feature = "debug_build")]
+    eprintln!("{:?}", ast);
+
     TypeChecker::annotate_types(&mut ast).unwrap();
     let chunks = Compiler::compile(&ast);
+
+    #[cfg(debug_build)]
     disassemble_chunk(&chunks);
-    let mut vm = VM::new(chunks);
+
+    let mut vm = VM::new(Box::new(stdout()), chunks);
     vm.run();
 }

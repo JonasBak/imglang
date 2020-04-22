@@ -4,6 +4,14 @@ version = "0.1.0"
 authors = ["jonasbak <jonasxb@gmail.com>"]
 edition = "2018"
 
+[features]
+default = []
+
+debug = ["debug_build", "debug_runtime"]
+
+debug_build = []
+debug_runtime = []
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

@@ -1,5 +1,6 @@
 use super::*;
 use std::convert::TryInto;
+use std::io::Write;
 
 macro_rules! expr {
     ($e:expr) => {
@@ -22,14 +23,16 @@ struct CallFrame {
 }
 
 pub struct VM {
+    out: Box<dyn Write>,
     stack: Vec<u8>,
     chunks: Vec<Chunk>,
     call_frames: Vec<CallFrame>,
 }
 
 impl VM {
-    pub fn new(chunks: Vec<Chunk>) -> VM {
+    pub fn new(out: Box<dyn Write>, chunks: Vec<Chunk>) -> VM {
         VM {
+            out,
             stack: vec![],
             chunks,
             call_frames: vec![],
@@ -44,14 +47,17 @@ impl VM {
         let mut frame_offset = 0;
         loop {
             let chunk = &self.chunks[current_chunk];
-            print!(
-                "{:0>4}\tchunk:{: >3} stack:{: >4} nested:{: >2}\t",
-                ip,
-                current_chunk,
-                self.len_stack(),
-                self.call_frames.len(),
-            );
-            disassemble(&chunk, ip);
+            #[cfg(feature = "debug_runtime")]
+            {
+                eprint!(
+                    "{:0>4}\tchunk:{: >3} stack:{: >4} nested:{: >2}\t",
+                    ip,
+                    current_chunk,
+                    self.len_stack(),
+                    self.call_frames.len(),
+                );
+                disassemble(&chunk, ip);
+            }
             ip = ip + 1;
             match OpCode::from(chunk.get_op(ip - 1)) {
                 OpCode::Return => {
@@ -77,11 +83,11 @@ impl VM {
                 }
                 OpCode::PrintF64 => {
                     let a = self.pop_f64();
-                    println!("< {}", a);
+                    writeln!(*self.out, "{}", a).unwrap();
                 }
                 OpCode::PrintBool => {
                     let a = self.pop_bool();
-                    println!("< {}", a);
+                    writeln!(*self.out, "{}", a).unwrap();
                 }
                 OpCode::ConstantF64 => {
                     let i = chunk.get_op_u16(ip);

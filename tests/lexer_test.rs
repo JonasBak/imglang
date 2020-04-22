@@ -272,7 +272,7 @@ fn keywords() {
         Some(Token {
             start: 32,
             end: 35,
-            t: TokenType::Nil,
+            t: TokenType::TypeNil,
         }),
         Some(Token {
             start: 36,
