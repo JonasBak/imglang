@@ -101,21 +101,22 @@ impl Compiler {
                     _ => todo!(),
                 };
             }
+            Ast::Return(expr) => {
+                self.codegen(expr);
+                self.chunk().push_op(OpCode::Return as u8);
+            }
             Ast::Declaration(name, expr, t) => {
                 self.codegen(expr);
                 self.declare_variable(name, t.clone().unwrap());
             }
-            Ast::FuncDeclaration(name, func, args, ret_t) => {
-                // this check can be removed as it is checked in typecheking
-                if self.is_root && self.current_scope_depth == 0 {
-                    self.globals.insert(
-                        name.clone(),
-                        GlobalVariable::Function(
-                            self.chunks.len() as u16,
-                            args.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8,
-                        ),
-                    );
-                }
+            Ast::FuncDeclaration(name, func, args, _) => {
+                self.globals.insert(
+                    name.clone(),
+                    GlobalVariable::Function(
+                        self.chunks.len() as u16,
+                        args.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8,
+                    ),
+                );
                 self.codegen(func);
                 self.chunk().push_op(OpCode::PopU16 as u8);
             }
@@ -330,8 +331,8 @@ impl Compiler {
                 };
             }
             Ast::GreaterEqual(l, r, t) => {
-                self.codegen(r);
                 self.codegen(l);
+                self.codegen(r);
                 match t.as_ref().unwrap() {
                     AstType::Float => self.chunk().push_op(OpCode::LesserF64 as u8),
                     _ => panic!(),
@@ -347,8 +348,8 @@ impl Compiler {
                 };
             }
             Ast::LesserEqual(l, r, t) => {
-                self.codegen(r);
                 self.codegen(l);
+                self.codegen(r);
                 match t.as_ref().unwrap() {
                     AstType::Float => self.chunk().push_op(OpCode::GreaterF64 as u8),
                     _ => panic!(),

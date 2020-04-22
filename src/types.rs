@@ -45,6 +45,7 @@ pub struct TypeChecker {
     globals: HashMap<String, AstType>,
     current_scope_depth: u16,
     is_root: bool,
+    return_values: Vec<AstType>,
 }
 
 impl TypeChecker {
@@ -54,6 +55,7 @@ impl TypeChecker {
             globals: HashMap::new(),
             current_scope_depth: 0,
             is_root: true,
+            return_values: vec![],
         };
         type_checker.annotate_type(ast)?;
         Ok(())
@@ -106,6 +108,12 @@ impl TypeChecker {
                     t @ _ => return Err(TypeError::NotAllowed(t)),
                 };
                 t.replace(expr_t);
+                AstType::Nil
+            }
+            Ast::Return(expr) => {
+                // TODO don't allow if root
+                let expr_t = self.annotate_type(expr)?;
+                self.return_values.push(expr_t);
                 AstType::Nil
             }
             Ast::Declaration(name, expr, t) => {
@@ -185,6 +193,7 @@ impl TypeChecker {
             }
             Ast::Function { body, args, ret_t } => {
                 let old_variables = mem::replace(&mut self.variables, vec![]);
+                let old_return_values = mem::replace(&mut self.return_values, vec![]);
                 let old_depth = self.current_scope_depth;
                 let old_is_root = self.is_root;
                 self.current_scope_depth = 0;
@@ -196,13 +205,16 @@ impl TypeChecker {
 
                 let body_t = self.annotate_type(body)?;
 
+                // TODO check for divergens and potential "leftouts" that default to nil
+                // TODO check if all self.return_values is ret_t
+                // if *ret_t != body_t {
+                //     return Err(TypeError::Mismatch(ret_t.clone(), body_t));
+                // }
+
                 mem::replace(&mut self.variables, old_variables);
+                mem::replace(&mut self.return_values, old_return_values);
                 self.current_scope_depth = old_depth;
                 self.is_root = old_is_root;
-
-                if *ret_t != body_t {
-                    return Err(TypeError::Mismatch(ret_t.clone(), body_t));
-                }
 
                 AstType::Function(
                     args.iter().map(|t| t.1.clone()).collect(),

@@ -44,13 +44,14 @@ impl VM {
         let mut frame_offset = 0;
         loop {
             let chunk = &self.chunks[current_chunk];
-            print!(
-                "{:0>6}\tchunk:{: >3} stack:{: >4}\t",
-                ip,
-                current_chunk,
-                self.len_stack()
-            );
-            disassemble(&chunk, ip);
+            // print!(
+            //     "{:0>4}\tchunk:{: >3} stack:{: >4} nested:{: >2}\t",
+            //     ip,
+            //     current_chunk,
+            //     self.len_stack(),
+            //     self.call_frames.len(),
+            // );
+            // disassemble(&chunk, ip);
             ip = ip + 1;
             match OpCode::from(chunk.get_op(ip - 1)) {
                 OpCode::Return => {

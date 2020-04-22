@@ -5,6 +5,7 @@ pub enum Ast {
     Program(Vec<Ast>),
     Block(Vec<Ast>),
     Print(Box<Ast>, Option<AstType>),
+    Return(Box<Ast>),
 
     Declaration(String, Box<Ast>, Option<AstType>),
     FuncDeclaration(String, Box<Ast>, Vec<AstType>, AstType),
@@ -321,6 +322,10 @@ fn statement(lexer: &mut Lexer) -> ParserResult<Ast> {
             lexer.next();
             while_statement(lexer)
         }
+        TokenType::Return => {
+            lexer.next();
+            return_statement(lexer)
+        }
         _ => expression_statement(lexer),
     }
 }
@@ -498,4 +503,14 @@ fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
     };
 
     Ok(function)
+}
+
+fn return_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let expr = expression(lexer)?;
+    consume(
+        lexer,
+        |t| t == &TokenType::Semicolon,
+        "expected ';' after return statement",
+    )?;
+    Ok(Ast::Return(Box::new(expr)))
 }
