@@ -43,7 +43,6 @@ pub enum TokenType {
     Fun,
     For,
     If,
-    Nil,
     Or,
     Print,
     Return,
@@ -52,6 +51,10 @@ pub enum TokenType {
     True,
     Var,
     While,
+
+    TypeFloat,
+    TypeBool,
+    TypeNil,
 
     Eof,
 }
@@ -263,7 +266,7 @@ pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
                     "fun" => TokenType::Fun,
                     "for" => TokenType::For,
                     "if" => TokenType::If,
-                    "nil" => TokenType::Nil,
+                    "nil" => TokenType::TypeNil,
                     "or" => TokenType::Or,
                     "print" => TokenType::Print,
                     "return" => TokenType::Return,
@@ -272,6 +275,8 @@ pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
                     "true" => TokenType::True,
                     "var" => TokenType::Var,
                     "while" => TokenType::While,
+                    "float" => TokenType::TypeFloat,
+                    "bool" => TokenType::TypeBool,
                     _ => TokenType::Identifier(val),
                 },
                 _ => t.t,

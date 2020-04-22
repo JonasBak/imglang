@@ -104,7 +104,6 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
         op @ OpCode::DivideF64 => print_simple(op),
         op @ OpCode::AddF64 => print_simple(op),
         op @ OpCode::SubF64 => print_simple(op),
-        op @ OpCode::Nil => print_simple(op),
         op @ OpCode::True => print_simple(op),
         op @ OpCode::False => print_simple(op),
         op @ OpCode::PopU8 => print_simple(op),

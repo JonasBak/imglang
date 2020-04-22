@@ -13,9 +13,10 @@ pub enum AstType {
 impl AstType {
     pub fn size(&self) -> u16 {
         match self {
-            AstType::Bool | AstType::Nil => 1,
+            AstType::Bool => 1,
             AstType::Float => 8,
             AstType::Function { .. } => 2,
+            AstType::Nil => 0,
         }
     }
 }
@@ -111,8 +112,16 @@ impl TypeChecker {
                 AstType::Nil
             }
             Ast::Return(expr) => {
-                // TODO don't allow if root
-                let expr_t = self.annotate_type(expr)?;
+                if self.is_root {
+                    return Err(TypeError::Other(
+                        "can't return from root function".to_string(),
+                    ));
+                }
+                let expr_t = if let Some(expr) = expr {
+                    self.annotate_type(expr)?
+                } else {
+                    AstType::Nil
+                };
                 self.return_values.push(expr_t);
                 AstType::Nil
             }
@@ -205,11 +214,21 @@ impl TypeChecker {
 
                 let body_t = self.annotate_type(body)?;
 
-                // TODO check for divergens and potential "leftouts" that default to nil
-                // TODO check if all self.return_values is ret_t
-                // if *ret_t != body_t {
-                //     return Err(TypeError::Mismatch(ret_t.clone(), body_t));
-                // }
+                // TODO allow "expression functions" to not specify type, and take it from body_t
+                // would require all function declarations to only use blocks, as globals
+                // needs to have a known return type before typechecking
+                // TODO check for divergence and potential "leftouts" that default to nil
+                if self.return_values.len() == 0 {
+                    if body_t != *ret_t {
+                        return Err(TypeError::Other(
+                            "explicit return statement required".to_string(),
+                        ));
+                    }
+                } else {
+                    if let Some(t) = self.return_values.iter().filter(|t| *t != ret_t).next() {
+                        return Err(TypeError::Mismatch(ret_t.clone(), t.clone()));
+                    }
+                }
 
                 mem::replace(&mut self.variables, old_variables);
                 mem::replace(&mut self.return_values, old_return_values);
@@ -244,7 +263,6 @@ impl TypeChecker {
             }
             Ast::Float(_) => AstType::Float,
             Ast::Bool(_) => AstType::Bool,
-            Ast::Nil => AstType::Nil,
             Ast::Negate(a) => self.annotate_type(a)?,
             Ast::Not(a) => {
                 self.annotate_type(a)?;

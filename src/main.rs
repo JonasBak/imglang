@@ -17,18 +17,23 @@ use vm::*;
 
 fn main() {
     let source = "
-        fun fib(a) {
-            if (a <= 2) {
-                return 1;
-            }
-            return fib(a-1) + fib(a-2);
+        fun xor(a bool, b bool) bool {
+           return (a or b) and (!a or !b);
         }
-        print fib(30);
-        // var n = 1;
-        // while (n < 15) {
-        //     print fib(n);
-        //     n = n + 1;
-        // }
+        print xor(false, true);
+        fun test1() {
+            print 123;
+        }
+        test1();
+        fun test2(a float, b bool) float {
+            if (b) {
+                return a * 10;
+            } else {
+                return a - 2;
+            }
+        }
+        print test2(10, true);
+        print test2(10, false);
         "
     .to_string();
     let mut lexer = Lexer::new(&source).unwrap();

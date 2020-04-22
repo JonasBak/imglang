@@ -23,7 +23,6 @@ generate_opcodes!(
     DivideF64,
     AddF64,
     SubF64,
-    Nil,
     True,
     False,
     PushU16,

@@ -102,7 +102,9 @@ impl Compiler {
                 };
             }
             Ast::Return(expr) => {
-                self.codegen(expr);
+                if let Some(expr) = expr {
+                    self.codegen(expr);
+                }
                 self.chunk().push_op(OpCode::Return as u8);
             }
             Ast::Declaration(name, expr, t) => {
@@ -200,8 +202,13 @@ impl Compiler {
             Ast::ExprStatement(expr, t) => {
                 self.codegen(expr);
                 match t.as_ref().unwrap() {
-                    AstType::Bool => self.chunk().push_op(OpCode::PopU8 as u8),
-                    AstType::Float => self.chunk().push_op(OpCode::PopU64 as u8),
+                    AstType::Bool => {
+                        self.chunk().push_op(OpCode::PopU8 as u8);
+                    }
+                    AstType::Float => {
+                        self.chunk().push_op(OpCode::PopU64 as u8);
+                    }
+                    AstType::Nil => (),
                     _ => todo!(),
                 };
             }
@@ -272,9 +279,6 @@ impl Compiler {
                     false => self.chunk().push_op(OpCode::False as u8),
                 };
             }
-            Ast::Nil => {
-                self.chunk().push_op(OpCode::Nil as u8);
-            }
             Ast::Negate(n) => {
                 self.codegen(n);
                 self.chunk().push_op(OpCode::NegateF64 as u8);
@@ -307,7 +311,7 @@ impl Compiler {
                 self.codegen(l);
                 self.codegen(r);
                 match t.as_ref().unwrap() {
-                    AstType::Nil | AstType::Bool => self.chunk().push_op(OpCode::EqualU8 as u8),
+                    AstType::Bool => self.chunk().push_op(OpCode::EqualU8 as u8),
                     AstType::Float => self.chunk().push_op(OpCode::EqualU64 as u8),
                     _ => todo!(),
                 };
@@ -316,7 +320,7 @@ impl Compiler {
                 self.codegen(l);
                 self.codegen(r);
                 match t.as_ref().unwrap() {
-                    AstType::Nil | AstType::Bool => self.chunk().push_op(OpCode::EqualU8 as u8),
+                    AstType::Bool => self.chunk().push_op(OpCode::EqualU8 as u8),
                     AstType::Float => self.chunk().push_op(OpCode::EqualU64 as u8),
                     _ => todo!(),
                 };

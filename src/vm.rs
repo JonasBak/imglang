@@ -44,14 +44,14 @@ impl VM {
         let mut frame_offset = 0;
         loop {
             let chunk = &self.chunks[current_chunk];
-            // print!(
-            //     "{:0>4}\tchunk:{: >3} stack:{: >4} nested:{: >2}\t",
-            //     ip,
-            //     current_chunk,
-            //     self.len_stack(),
-            //     self.call_frames.len(),
-            // );
-            // disassemble(&chunk, ip);
+            print!(
+                "{:0>4}\tchunk:{: >3} stack:{: >4} nested:{: >2}\t",
+                ip,
+                current_chunk,
+                self.len_stack(),
+                self.call_frames.len(),
+            );
+            disassemble(&chunk, ip);
             ip = ip + 1;
             match OpCode::from(chunk.get_op(ip - 1)) {
                 OpCode::Return => {
@@ -101,7 +101,6 @@ impl VM {
                 OpCode::DivideF64 => binary_op_f64!(self, /),
                 OpCode::AddF64 => binary_op_f64!(self, +),
                 OpCode::SubF64 => binary_op_f64!(self, -),
-                OpCode::Nil => self.push_nil(),
                 OpCode::True => self.push_bool(true),
                 OpCode::False => self.push_bool(false),
                 OpCode::PushU16 => {
@@ -265,12 +264,5 @@ impl VM {
     }
     pub fn pop_bool(&mut self) -> bool {
         self.stack.pop().unwrap() != 0
-    }
-
-    pub fn push_nil(&mut self) {
-        self.stack.push(0);
-    }
-    pub fn pop_nil(&mut self) {
-        self.stack.pop().unwrap();
     }
 }

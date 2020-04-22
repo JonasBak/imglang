@@ -5,7 +5,7 @@ pub enum Ast {
     Program(Vec<Ast>),
     Block(Vec<Ast>),
     Print(Box<Ast>, Option<AstType>),
-    Return(Box<Ast>),
+    Return(Option<Box<Ast>>),
 
     Declaration(String, Box<Ast>, Option<AstType>),
     FuncDeclaration(String, Box<Ast>, Vec<AstType>, AstType),
@@ -26,7 +26,6 @@ pub enum Ast {
 
     Float(f64),
     Bool(bool),
-    Nil,
 
     Negate(Box<Ast>),
     Not(Box<Ast>),
@@ -80,6 +79,16 @@ fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool, msg: &'static str) -> P
     Ok(())
 }
 
+fn parse_type(lexer: &mut Lexer) -> Option<AstType> {
+    let t = match lexer.current_t() {
+        TokenType::TypeFloat => AstType::Float,
+        TokenType::TypeBool => AstType::Bool,
+        _ => return None,
+    };
+    lexer.next();
+    return Some(t);
+}
+
 fn get_rule(t: &TokenType) -> Rule {
     match t {
         TokenType::LeftPar => (Some(grouping), Some(call), PREC_CALL),
@@ -90,7 +99,6 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::Minus => (Some(unary), Some(binary), PREC_TERM),
         TokenType::True => (Some(literal), None, PREC_NONE),
         TokenType::False => (Some(literal), None, PREC_NONE),
-        TokenType::Nil => (Some(literal), None, PREC_NONE),
         TokenType::Bang => (Some(unary), None, PREC_NONE),
         TokenType::EqualEqual => (None, Some(binary), PREC_EQUALITY),
         TokenType::BangEqual => (None, Some(binary), PREC_EQUALITY),
@@ -166,7 +174,6 @@ fn literal(lexer: &mut Lexer) -> ParserResult<Ast> {
         TokenType::Float(f) => Ast::Float(f),
         TokenType::True => Ast::Bool(true),
         TokenType::False => Ast::Bool(false),
-        TokenType::Nil => Ast::Nil,
         _ => {
             return Err(ParserError::Unexpected(
                 lexer.prev().unwrap(),
@@ -436,7 +443,11 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
         };
         lexer.next();
 
-        args.push((arg, AstType::Float)); // TODO read type
+        let arg_t = parse_type(lexer).ok_or_else(|| {
+            ParserError::Unexpected(lexer.current(), "expected type after argument")
+        })?;
+
+        args.push((arg, arg_t));
 
         if lexer.current_t() != TokenType::Comma {
             break;
@@ -448,6 +459,7 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
         |t| t == &TokenType::RightPar,
         "expected ')' after arguments",
     )?;
+    let ret_t = parse_type(lexer).unwrap_or(AstType::Nil);
     let body = if lexer.current_t() == TokenType::LeftBrace {
         statement(lexer)?
     } else {
@@ -456,7 +468,7 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
     Ok(Ast::Function {
         body: Box::new(body),
         args,
-        ret_t: AstType::Float, // TODO read type
+        ret_t,
     })
 }
 
@@ -506,11 +518,15 @@ fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
 }
 
 fn return_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
-    let expr = expression(lexer)?;
+    let expr = if lexer.current_t() != TokenType::Semicolon {
+        Some(Box::new(expression(lexer)?))
+    } else {
+        None
+    };
     consume(
         lexer,
         |t| t == &TokenType::Semicolon,
         "expected ';' after return statement",
     )?;
-    Ok(Ast::Return(Box::new(expr)))
+    Ok(Ast::Return(expr))
 }
