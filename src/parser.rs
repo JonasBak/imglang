@@ -79,14 +79,46 @@ fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool, msg: &'static str) -> P
     Ok(())
 }
 
-fn parse_type(lexer: &mut Lexer) -> Option<AstType> {
+fn parse_type(lexer: &mut Lexer) -> ParserResult<Option<AstType>> {
     let t = match lexer.current_t() {
-        TokenType::TypeFloat => AstType::Float,
-        TokenType::TypeBool => AstType::Bool,
-        _ => return None,
+        TokenType::TypeFloat => {
+            lexer.next();
+            AstType::Float
+        }
+        TokenType::TypeBool => {
+            lexer.next();
+            AstType::Bool
+        }
+        TokenType::Lesser => {
+            lexer.next();
+            let mut args = vec![];
+            while match lexer.current_t() {
+                TokenType::Semicolon | TokenType::Greater => false,
+                _ => true,
+            } {
+                args.push(parse_type(lexer)?.unwrap());
+                if lexer.current_t() == TokenType::Comma {
+                    lexer.next();
+                }
+            }
+
+            let ret_t = if lexer.current_t() == TokenType::Semicolon {
+                lexer.next();
+                parse_type(lexer)?.unwrap()
+            } else {
+                AstType::Nil
+            };
+
+            consume(
+                lexer,
+                |t| t == &TokenType::Greater,
+                "expected '>' after argument types",
+            )?;
+            AstType::Function(args, Box::new(ret_t))
+        }
+        _ => return Ok(None),
     };
-    lexer.next();
-    return Some(t);
+    return Ok(Some(t));
 }
 
 fn get_rule(t: &TokenType) -> Rule {
@@ -443,7 +475,7 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
         };
         lexer.next();
 
-        let arg_t = parse_type(lexer).ok_or_else(|| {
+        let arg_t = parse_type(lexer)?.ok_or_else(|| {
             ParserError::Unexpected(lexer.current(), "expected type after argument")
         })?;
 
@@ -459,7 +491,7 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
         |t| t == &TokenType::RightPar,
         "expected ')' after arguments",
     )?;
-    let ret_t = parse_type(lexer).unwrap_or(AstType::Nil);
+    let ret_t = parse_type(lexer)?.unwrap_or(AstType::Nil);
     let body = if lexer.current_t() == TokenType::LeftBrace {
         statement(lexer)?
     } else {
