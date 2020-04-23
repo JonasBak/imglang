@@ -240,25 +240,20 @@ impl TypeChecker {
                     Box::new(ret_t.clone()),
                 )
             }
-            Ast::Call(name, args) => {
+            Ast::Call(ident, args, args_width) => {
+                let ident_t = self.annotate_type(ident)?;
                 let mut args_t = vec![];
                 for arg in args.iter_mut() {
                     args_t.push(self.annotate_type(arg)?);
                 }
-                let (func_args_t, ret_t) = match self
-                    .resolve_variable(name)
-                    .ok_or(TypeError::NotDefined(name.clone()))?
-                {
-                    Variable::Local(LocalVariable {
-                        t: AstType::Function(a, r),
-                        ..
-                    }) => (a, r),
-                    Variable::Global(AstType::Function(a, r)) => (a, r),
-                    _ => return Err(TypeError::NotCallable(name.clone())),
+                let (func_args_t, ret_t) = match ident_t {
+                    AstType::Function(a, r) => (a, r),
+                    _ => return Err(TypeError::NotCallable("TODO".to_string())),
                 };
                 if args_t != func_args_t {
-                    return Err(TypeError::BadCallSignature(name.clone()));
+                    return Err(TypeError::BadCallSignature("TODO".to_string()));
                 }
+                args_width.replace(args_t.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8);
                 *ret_t.clone()
             }
             Ast::Float(_) => AstType::Float,

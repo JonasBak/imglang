@@ -22,7 +22,7 @@ pub enum Ast {
         args: Vec<(String, AstType)>,
         ret_t: AstType,
     },
-    Call(String, Vec<Ast>),
+    Call(Box<Ast>, Vec<Ast>, Option<u8>),
 
     Float(f64),
     Bool(bool),
@@ -505,15 +505,6 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
 }
 
 fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
-    let name = match ident {
-        Ast::Variable(name, _) => name,
-        _ => {
-            return Err(ParserError::Unexpected(
-                lexer.prev().unwrap(),
-                "unexpected token when calling function, expected identifier",
-            ))
-        }
-    };
     let mut args = vec![];
     while lexer.current_t() != TokenType::RightPar {
         args.push(expression(lexer)?);
@@ -526,7 +517,7 @@ fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
         |t| t == &TokenType::RightPar,
         "expected ')' after arguments",
     )?;
-    Ok(Ast::Call(name, args))
+    Ok(Ast::Call(Box::new(ident), args, None))
 }
 
 fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {

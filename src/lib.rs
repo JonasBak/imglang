@@ -1,5 +1,6 @@
 mod chunk;
 mod compiler;
+mod debugger;
 mod lexer;
 mod object;
 mod parser;
@@ -8,6 +9,7 @@ mod vm;
 
 pub use chunk::*;
 pub use compiler::*;
+pub use debugger::*;
 pub use lexer::*;
 pub use object::*;
 pub use parser::*;

@@ -11,7 +11,7 @@ struct LocalVariable {
 }
 #[derive(Debug, Clone)]
 enum GlobalVariable {
-    Function(u16, u8),
+    Function(u16),
 }
 enum Variable {
     Local(LocalVariable),
@@ -111,13 +111,10 @@ impl Compiler {
                 self.codegen(expr);
                 self.declare_variable(name, t.clone().unwrap());
             }
-            Ast::FuncDeclaration(name, func, args, _) => {
+            Ast::FuncDeclaration(name, func, _, _) => {
                 self.globals.insert(
                     name.clone(),
-                    GlobalVariable::Function(
-                        self.chunks.len() as u16,
-                        args.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8,
-                    ),
+                    GlobalVariable::Function(self.chunks.len() as u16),
                 );
                 self.codegen(func);
                 self.chunk().push_op(OpCode::PopU16 as u8);
@@ -138,7 +135,7 @@ impl Compiler {
                         };
                         self.chunk().push_op_u16(v.offset);
                     }
-                    Variable::Global(GlobalVariable::Function(chunk_i, _)) => {
+                    Variable::Global(GlobalVariable::Function(chunk_i)) => {
                         self.chunk().push_op(OpCode::PushU16 as u8);
                         self.chunk().push_op_u16(chunk_i);
                     }
@@ -241,30 +238,15 @@ impl Compiler {
                 self.chunk().push_op(OpCode::Function as u8);
                 self.chunk().push_op_u16(c);
             }
-            Ast::Call(name, args) => {
-                let v = self
-                    .resolve_variable(name)
-                    .expect("TODO could not resolve variable");
-
+            Ast::Call(ident, args, args_width) => {
                 for arg in args.iter() {
                     self.codegen(arg);
                 }
 
-                let args_width = match v {
-                    Variable::Local(v) => match &v.t {
-                        AstType::Function(args, _) => {
-                            self.chunk().push_op(OpCode::VariableU16 as u8);
-                            self.chunk().push_op_u16(v.offset);
-                            args.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8
-                        }
-                        _ => panic!(),
-                    },
-                    Variable::Global(GlobalVariable::Function(chunk_i, args_width)) => {
-                        self.chunk().push_op(OpCode::PushU16 as u8);
-                        self.chunk().push_op_u16(chunk_i);
-                        args_width
-                    }
-                };
+                self.codegen(ident);
+
+                let args_width = args_width.unwrap();
+
                 self.chunk().push_op(OpCode::Call as u8);
                 self.chunk().push_op(args_width);
             }

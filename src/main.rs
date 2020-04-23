@@ -41,13 +41,13 @@ fn main() {
         }
     };
 
-    #[cfg(feature = "debug_build")]
-    eprintln!("{:?}", ast);
-
     TypeChecker::annotate_types(&mut ast).unwrap();
     let chunks = Compiler::compile(&ast);
 
-    #[cfg(debug_build)]
+    #[cfg(feature = "debug_build")]
+    eprintln!("{:?}", ast);
+
+    #[cfg(feature = "debug_build")]
     disassemble_chunk(&chunks);
 
     let mut vm = VM::new(chunks);

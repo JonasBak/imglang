@@ -49,3 +49,12 @@ fun returnFunction1() <> {
 }
 var inner = returnFunction1();
 inner();
+
+// calls can be chained
+fun chain() <float;float> {
+  return fun(a float) float {
+    return a * 10 + 1;
+  };
+}
+
+print chain()(5);
