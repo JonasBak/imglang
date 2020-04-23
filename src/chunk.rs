@@ -40,6 +40,7 @@ generate_opcodes!(
     VariableU16,
     VariableU64,
     AssignU8,
+    AssignU16,
     AssignU64,
     JumpIfFalse,
     Jump,

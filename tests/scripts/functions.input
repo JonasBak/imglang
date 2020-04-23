@@ -58,3 +58,16 @@ fun chain() <float;float> {
 }
 
 print chain()(5);
+
+// functions can be used as agruments
+fun arg1() {
+  print 888;
+}
+var arg2 = fun() {
+  print 999;
+};
+fun callArg(f <>) {
+  f();
+}
+callArg(arg1);
+callArg(arg2);

@@ -72,8 +72,9 @@ impl Compiler {
         while self.variables.last().map(|v| v.depth).unwrap_or(0) > self.current_scope_depth {
             match self.variables.pop().unwrap().t {
                 AstType::Bool => self.chunk().push_op(OpCode::PopU8 as u8),
+                AstType::Function(..) => self.chunk().push_op(OpCode::PopU16 as u8),
                 AstType::Float => self.chunk().push_op(OpCode::PopU64 as u8),
-                _ => todo!(),
+                AstType::Nil => panic!(),
             };
         }
     }
@@ -131,7 +132,7 @@ impl Compiler {
                                 self.chunk().push_op(OpCode::VariableU16 as u8)
                             }
                             AstType::Float => self.chunk().push_op(OpCode::VariableU64 as u8),
-                            _ => todo!(),
+                            AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
                     }
@@ -150,6 +151,7 @@ impl Compiler {
                     Variable::Local(v) => {
                         match t.as_ref().unwrap() {
                             AstType::Bool => self.chunk().push_op(OpCode::AssignU8 as u8),
+                            AstType::Function(..) => self.chunk().push_op(OpCode::AssignU16 as u8),
                             AstType::Float => self.chunk().push_op(OpCode::AssignU64 as u8),
                             _ => todo!(),
                         };

@@ -132,6 +132,10 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
             print_unary(op, chunk.get_op_u16(ip + 1) as u64);
             3
         }
+        op @ OpCode::AssignU16 => {
+            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
+            3
+        }
         op @ OpCode::AssignU64 => {
             print_unary(op, chunk.get_op_u16(ip + 1) as u64);
             3

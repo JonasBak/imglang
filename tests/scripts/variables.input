@@ -20,3 +20,10 @@ print a;
 var b = 1;
 b = b + 1;
 print b;
+
+// functions can be assigned to variables and called
+fun testFun() {
+  print 555;
+}
+var testFunVar = testFun;
+testFunVar();

@@ -166,6 +166,13 @@ impl VM {
                     let v = self.peek_u8(top);
                     self.set_u8(v, i as usize + frame_offset);
                 }
+                OpCode::AssignU16 => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let top = self.len_stack() - 2;
+                    let v = self.peek_u16(top);
+                    self.set_u16(v, i as usize + frame_offset);
+                }
                 OpCode::AssignU64 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
@@ -233,6 +240,9 @@ impl VM {
 
     pub fn peek_u16(&mut self, i: usize) -> u16 {
         u16::from_le_bytes(self.stack[i..i + 2].try_into().unwrap())
+    }
+    pub fn set_u16(&mut self, data: u16, i: usize) {
+        self.stack[i..i + 2].copy_from_slice(&data.to_le_bytes());
     }
     pub fn push_u16(&mut self, data: u16) {
         self.stack.extend_from_slice(&data.to_le_bytes());
