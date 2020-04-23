@@ -74,6 +74,7 @@ impl Compiler {
                 AstType::Bool => self.chunk().push_op(OpCode::PopU8 as u8),
                 AstType::Function(..) => self.chunk().push_op(OpCode::PopU16 as u8),
                 AstType::Float => self.chunk().push_op(OpCode::PopU64 as u8),
+                AstType::String => self.chunk().push_op(OpCode::PopU32 as u8),
                 AstType::Nil => panic!(),
             };
         }
@@ -99,7 +100,9 @@ impl Compiler {
                 match t.as_ref().unwrap() {
                     AstType::Float => self.chunk().push_op(OpCode::PrintF64 as u8),
                     AstType::Bool => self.chunk().push_op(OpCode::PrintBool as u8),
-                    _ => todo!(),
+                    AstType::Function(..) => todo!(),
+                    AstType::Nil => todo!(),
+                    AstType::String => self.chunk().push_op(OpCode::PrintString as u8),
                 };
             }
             Ast::Return(expr) => {
@@ -132,6 +135,7 @@ impl Compiler {
                                 self.chunk().push_op(OpCode::VariableU16 as u8)
                             }
                             AstType::Float => self.chunk().push_op(OpCode::VariableU64 as u8),
+                            AstType::String => self.chunk().push_op(OpCode::VariableU32 as u8),
                             AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
@@ -153,7 +157,8 @@ impl Compiler {
                             AstType::Bool => self.chunk().push_op(OpCode::AssignU8 as u8),
                             AstType::Function(..) => self.chunk().push_op(OpCode::AssignU16 as u8),
                             AstType::Float => self.chunk().push_op(OpCode::AssignU64 as u8),
-                            _ => todo!(),
+                            AstType::String => todo!(),
+                            AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
                     }
@@ -262,6 +267,11 @@ impl Compiler {
                     true => self.chunk().push_op(OpCode::True as u8),
                     false => self.chunk().push_op(OpCode::False as u8),
                 };
+            }
+            Ast::String(s) => {
+                let i = self.chunk().add_const_string(s);
+                self.chunk().push_op(OpCode::ConstantString as u8);
+                self.chunk().push_op_u16(i);
             }
             Ast::Negate(n) => {
                 self.codegen(n);

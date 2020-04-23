@@ -27,6 +27,8 @@ pub enum Ast {
     Float(f64),
     Bool(bool),
 
+    String(String),
+
     Negate(Box<Ast>),
     Not(Box<Ast>),
 
@@ -142,6 +144,7 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::And => (None, Some(logic_and), PREC_AND),
         TokenType::Or => (None, Some(logic_or), PREC_OR),
         TokenType::Fun => (Some(function), None, PREC_NONE),
+        TokenType::String(_) => (Some(literal), None, PREC_NONE),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -206,6 +209,7 @@ fn literal(lexer: &mut Lexer) -> ParserResult<Ast> {
         TokenType::Float(f) => Ast::Float(f),
         TokenType::True => Ast::Bool(true),
         TokenType::False => Ast::Bool(false),
+        TokenType::String(s) => Ast::String(s),
         _ => {
             return Err(ParserError::Unexpected(
                 lexer.prev().unwrap(),

@@ -1,5 +1,4 @@
 use super::*;
-use std::convert::TryInto;
 use std::io::Write;
 
 macro_rules! expr {
@@ -9,9 +8,9 @@ macro_rules! expr {
 }
 macro_rules! binary_op_f64{
     ($vm:ident, $op:tt) => {{
-        let r = $vm.pop_f64();
-        let l = $vm.pop_f64();
-        $vm.push_f64(expr!(l $op r));
+        let r = $vm.stack.pop_f64();
+        let l = $vm.stack.pop_f64();
+        $vm.stack.push_f64(expr!(l $op r));
     }}
 }
 
@@ -23,7 +22,8 @@ struct CallFrame {
 }
 
 pub struct VM {
-    stack: Vec<u8>,
+    stack: ByteVector,
+    heap: ByteVector,
     chunks: Vec<Chunk>,
     call_frames: Vec<CallFrame>,
 }
@@ -31,7 +31,8 @@ pub struct VM {
 impl VM {
     pub fn new(chunks: Vec<Chunk>) -> VM {
         VM {
-            stack: vec![],
+            stack: ByteVector::new(),
+            heap: ByteVector::new(),
             chunks,
             call_frames: vec![],
         }
@@ -72,119 +73,141 @@ impl VM {
 
                     let return_width = self.stack.len() - frame_offset - args_width as usize;
                     self.stack
+                        .0
                         .copy_within(frame_offset + args_width as usize.., frame_offset);
-                    self.stack.truncate(frame_offset + return_width);
+                    self.stack.0.truncate(frame_offset + return_width);
 
                     ip = parent_ip;
                     current_chunk = parent_chunk;
                     frame_offset = parent_frame_offset;
                 }
                 OpCode::PrintF64 => {
-                    let a = self.pop_f64();
+                    let a = self.stack.pop_f64();
                     writeln!(out, "{}", a).unwrap();
                 }
                 OpCode::PrintBool => {
-                    let a = self.pop_bool();
+                    let a = self.stack.pop_bool();
                     writeln!(out, "{}", a).unwrap();
+                }
+                OpCode::PrintString => {
+                    let a = self.stack.pop_u32();
+                    let string = self.heap.get_string(a);
+                    writeln!(out, "{}", string).unwrap();
                 }
                 OpCode::ConstantF64 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
                     let v = chunk.get_const_f64(i);
-                    self.push_f64(v);
+                    self.stack.push_f64(v);
+                }
+                OpCode::ConstantString => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let string_data = chunk.get_const_string(i);
+                    let string = self.heap.push_string(&string_data);
+                    self.stack.push_u32(string);
                 }
                 OpCode::NegateF64 => {
-                    let a = self.pop_f64();
-                    self.push_f64(-a);
+                    let a = self.stack.pop_f64();
+                    self.stack.push_f64(-a);
                 }
                 OpCode::Not => {
-                    let a = self.pop_bool();
-                    self.push_bool(!a);
+                    let a = self.stack.pop_bool();
+                    self.stack.push_bool(!a);
                 }
                 OpCode::MultiplyF64 => binary_op_f64!(self, *),
                 OpCode::DivideF64 => binary_op_f64!(self, /),
                 OpCode::AddF64 => binary_op_f64!(self, +),
                 OpCode::SubF64 => binary_op_f64!(self, -),
-                OpCode::True => self.push_bool(true),
-                OpCode::False => self.push_bool(false),
+                OpCode::True => self.stack.push_bool(true),
+                OpCode::False => self.stack.push_bool(false),
                 OpCode::PushU16 => {
                     let data = chunk.get_op_u16(ip);
                     ip += 2;
-                    self.push_u16(data);
+                    self.stack.push_u16(data);
                 }
                 OpCode::PopU8 => {
-                    self.pop_u8();
+                    self.stack.pop_u8();
                 }
                 OpCode::PopU16 => {
-                    self.pop_u16();
+                    self.stack.pop_u16();
+                }
+                OpCode::PopU32 => {
+                    self.stack.pop_u32();
                 }
                 OpCode::PopU64 => {
-                    self.pop_f64();
+                    self.stack.pop_f64();
                 }
                 OpCode::EqualU8 => {
-                    let r = self.pop_u8();
-                    let l = self.pop_u8();
-                    self.push_bool(l == r);
+                    let r = self.stack.pop_u8();
+                    let l = self.stack.pop_u8();
+                    self.stack.push_bool(l == r);
                 }
                 OpCode::EqualU64 => {
-                    let r = self.pop_u64();
-                    let l = self.pop_u64();
-                    self.push_bool(l == r);
+                    let r = self.stack.pop_u64();
+                    let l = self.stack.pop_u64();
+                    self.stack.push_bool(l == r);
                 }
                 OpCode::GreaterF64 => {
-                    let r = self.pop_f64();
-                    let l = self.pop_f64();
-                    self.push_bool(l > r);
+                    let r = self.stack.pop_f64();
+                    let l = self.stack.pop_f64();
+                    self.stack.push_bool(l > r);
                 }
                 OpCode::LesserF64 => {
-                    let r = self.pop_f64();
-                    let l = self.pop_f64();
-                    self.push_bool(l < r);
+                    let r = self.stack.pop_f64();
+                    let l = self.stack.pop_f64();
+                    self.stack.push_bool(l < r);
                 }
                 OpCode::VariableU8 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
-                    let v = self.peek_u8(i as usize + frame_offset);
-                    self.push_u8(v);
+                    let v = self.stack.get_u8(i as usize + frame_offset);
+                    self.stack.push_u8(v);
                 }
                 OpCode::VariableU16 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
-                    let v = self.peek_u16(i as usize + frame_offset);
-                    self.push_u16(v);
+                    let v = self.stack.get_u16(i as usize + frame_offset);
+                    self.stack.push_u16(v);
+                }
+                OpCode::VariableU32 => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let v = self.stack.get_u32(i as usize + frame_offset);
+                    self.stack.push_u32(v);
                 }
                 OpCode::VariableU64 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
-                    let v = self.peek_u64(i as usize + frame_offset);
-                    self.push_u64(v);
+                    let v = self.stack.get_u64(i as usize + frame_offset);
+                    self.stack.push_u64(v);
                 }
                 OpCode::AssignU8 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
                     let top = self.len_stack() - 1;
-                    let v = self.peek_u8(top);
-                    self.set_u8(v, i as usize + frame_offset);
+                    let v = self.stack.get_u8(top);
+                    self.stack.set_u8(v, i as usize + frame_offset);
                 }
                 OpCode::AssignU16 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
                     let top = self.len_stack() - 2;
-                    let v = self.peek_u16(top);
-                    self.set_u16(v, i as usize + frame_offset);
+                    let v = self.stack.get_u16(top);
+                    self.stack.set_u16(v, i as usize + frame_offset);
                 }
                 OpCode::AssignU64 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
                     let top = self.len_stack() - 8;
-                    let v = self.peek_u64(top);
-                    self.set_u64(v, i as usize + frame_offset);
+                    let v = self.stack.get_u64(top);
+                    self.stack.set_u64(v, i as usize + frame_offset);
                 }
                 OpCode::JumpIfFalse => {
                     let offset = chunk.get_op_u16(ip);
                     ip += 2;
                     let top = self.len_stack() - 1;
-                    let v = self.peek_bool(top);
+                    let v = self.stack.get_bool(top);
                     if !v {
                         ip = offset as usize;
                     }
@@ -195,12 +218,12 @@ impl VM {
                 OpCode::Function => {
                     let chunk = chunk.get_op_u16(ip);
                     ip += 2;
-                    self.push_u16(chunk);
+                    self.stack.push_u16(chunk);
                 }
                 OpCode::Call => {
                     let args_width = chunk.get_op(ip);
                     ip += 1;
-                    let chunk_i = self.pop_u16();
+                    let chunk_i = self.stack.pop_u16();
 
                     self.call_frames.push(CallFrame {
                         parent_ip: ip,
@@ -214,69 +237,5 @@ impl VM {
                 }
             }
         }
-    }
-    pub fn push_f64(&mut self, data: f64) {
-        self.stack.extend_from_slice(&data.to_le_bytes());
-    }
-    pub fn pop_f64(&mut self) -> f64 {
-        let l = self.stack.len() - 8;
-        let v = f64::from_le_bytes(self.stack[l..].try_into().unwrap());
-        self.stack.truncate(l);
-        v
-    }
-
-    pub fn peek_u8(&mut self, i: usize) -> u8 {
-        self.stack[i]
-    }
-    pub fn set_u8(&mut self, data: u8, i: usize) {
-        self.stack[i] = data;
-    }
-    pub fn push_u8(&mut self, data: u8) {
-        self.stack.push(data);
-    }
-    pub fn pop_u8(&mut self) -> u8 {
-        self.stack.pop().unwrap()
-    }
-
-    pub fn peek_u16(&mut self, i: usize) -> u16 {
-        u16::from_le_bytes(self.stack[i..i + 2].try_into().unwrap())
-    }
-    pub fn set_u16(&mut self, data: u16, i: usize) {
-        self.stack[i..i + 2].copy_from_slice(&data.to_le_bytes());
-    }
-    pub fn push_u16(&mut self, data: u16) {
-        self.stack.extend_from_slice(&data.to_le_bytes());
-    }
-    pub fn pop_u16(&mut self) -> u16 {
-        let l = self.stack.len() - 2;
-        let v = u16::from_le_bytes(self.stack[l..].try_into().unwrap());
-        self.stack.truncate(l);
-        v
-    }
-
-    pub fn peek_u64(&mut self, i: usize) -> u64 {
-        u64::from_le_bytes(self.stack[i..i + 8].try_into().unwrap())
-    }
-    pub fn set_u64(&mut self, data: u64, i: usize) {
-        self.stack[i..i + 8].copy_from_slice(&data.to_le_bytes());
-    }
-    pub fn push_u64(&mut self, data: u64) {
-        self.stack.extend_from_slice(&data.to_le_bytes());
-    }
-    pub fn pop_u64(&mut self) -> u64 {
-        let l = self.stack.len() - 8;
-        let v = u64::from_le_bytes(self.stack[l..].try_into().unwrap());
-        self.stack.truncate(l);
-        v
-    }
-
-    pub fn peek_bool(&mut self, i: usize) -> bool {
-        self.stack[i] != 0
-    }
-    pub fn push_bool(&mut self, data: bool) {
-        self.stack.push(data as u8);
-    }
-    pub fn pop_bool(&mut self) -> bool {
-        self.stack.pop().unwrap() != 0
     }
 }

@@ -5,6 +5,7 @@ mod lexer;
 mod object;
 mod parser;
 mod types;
+mod utils;
 mod vm;
 
 use chunk::*;
@@ -16,6 +17,7 @@ use std::env;
 use std::fs;
 use std::io::stdout;
 use types::*;
+use utils::*;
 use vm::*;
 
 fn main() {
@@ -40,6 +42,9 @@ fn main() {
             return;
         }
     };
+
+    #[cfg(feature = "debug_build")]
+    eprintln!("{:?}", ast);
 
     TypeChecker::annotate_types(&mut ast).unwrap();
     let chunks = Compiler::compile(&ast);

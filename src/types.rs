@@ -9,13 +9,16 @@ pub enum AstType {
     Float,
     Bool,
     Nil,
+
+    String,
 }
 impl AstType {
     pub fn size(&self) -> u16 {
         match self {
             AstType::Bool => 1,
             AstType::Float => 8,
-            AstType::Function { .. } => 2,
+            AstType::Function(..) => 2,
+            AstType::String => 4,
             AstType::Nil => 0,
         }
     }
@@ -105,7 +108,7 @@ impl TypeChecker {
             }
             Ast::Print(expr, t) => {
                 let expr_t = match self.annotate_type(expr)? {
-                    t @ AstType::Bool | t @ AstType::Float => t,
+                    t @ AstType::Bool | t @ AstType::Float | t @ AstType::String => t,
                     t @ _ => return Err(TypeError::NotAllowed(t)),
                 };
                 t.replace(expr_t);
@@ -258,6 +261,7 @@ impl TypeChecker {
             }
             Ast::Float(_) => AstType::Float,
             Ast::Bool(_) => AstType::Bool,
+            Ast::String(_) => AstType::String,
             Ast::Negate(a) => self.annotate_type(a)?,
             Ast::Not(a) => {
                 self.annotate_type(a)?;

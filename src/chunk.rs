@@ -1,3 +1,4 @@
+use super::*;
 use std::convert::TryInto;
 
 macro_rules! generate_opcodes {
@@ -8,16 +9,17 @@ macro_rules! generate_opcodes {
             $(OpCode::$types,)+
         ];
         impl From<u8> for OpCode {
-	    fn from(op: u8) -> Self {
+            fn from(op: u8) -> Self {
                 OPCODE_LOOKUP[op as usize]
-	    }
-	}
+            }
+        }
     };
 }
 
 generate_opcodes!(
     Return,
     ConstantF64,
+    ConstantString,
     NegateF64,
     MultiplyF64,
     DivideF64,
@@ -28,6 +30,7 @@ generate_opcodes!(
     PushU16,
     PopU8,
     PopU16,
+    PopU32,
     PopU64,
     Not,
     EqualU8,
@@ -36,8 +39,10 @@ generate_opcodes!(
     LesserF64,
     PrintF64,
     PrintBool,
+    PrintString,
     VariableU8,
     VariableU16,
+    VariableU32,
     VariableU64,
     AssignU8,
     AssignU16,
@@ -48,16 +53,15 @@ generate_opcodes!(
     Call,
 );
 
-#[derive(Debug)]
 pub struct Chunk {
-    code: Vec<u8>,
-    data: Vec<u8>,
+    code: ByteVector,
+    data: ByteVector,
 }
 impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
-            code: Vec::new(),
-            data: Vec::new(),
+            code: ByteVector::new(),
+            data: ByteVector::new(),
         }
     }
     pub fn len_code(&self) -> usize {
@@ -68,44 +72,49 @@ impl Chunk {
     }
 
     pub fn push_op(&mut self, op: u8) -> usize {
-        self.code.push(op);
+        self.code.push_u8(op);
         self.code.len() - 1
     }
     pub fn push_op_u16(&mut self, op: u16) -> usize {
-        self.code.extend_from_slice(&op.to_le_bytes());
+        self.code.push_u16(op);
         self.code.len() - 2
     }
     pub fn push_op_u32(&mut self, op: u32) -> usize {
-        self.code.extend_from_slice(&op.to_le_bytes());
+        self.code.push_u32(op);
         self.code.len() - 4
     }
 
     pub fn get_op(&self, ip: usize) -> u8 {
-        self.code[ip]
+        self.code.get_u8(ip)
     }
     pub fn get_op_u16(&self, ip: usize) -> u16 {
-        u16::from_le_bytes(self.code[ip..ip + 2].try_into().unwrap())
+        self.code.get_u16(ip)
     }
     pub fn get_op_u32(&self, ip: usize) -> u32 {
-        u32::from_le_bytes(self.code[ip..ip + 4].try_into().unwrap())
+        self.code.get_u32(ip)
     }
 
     pub fn backpatch_jump(&mut self, offset: usize) {
         let top = self.code.len() as u16;
-        self.code[offset..offset + 2].copy_from_slice(&top.to_le_bytes());
+        self.code.0[offset..offset + 2].copy_from_slice(&top.to_le_bytes());
     }
 
     pub fn add_const_f64(&mut self, data: f64) -> u16 {
-        self.data.extend_from_slice(&data.to_le_bytes());
+        self.data.push_f64(data);
         (self.data.len() - 8) as u16
     }
 
+    pub fn add_const_string(&mut self, data: &String) -> u16 {
+        self.data.push_string(data) as u16
+    }
+
     pub fn get_const_f64(&self, i: u16) -> f64 {
-        let i = i as usize;
-        f64::from_le_bytes(self.data[i..i + 8].try_into().unwrap())
+        self.data.get_f64(i as usize)
     }
     pub fn get_const_u64(&self, i: u16) -> u64 {
-        let i = i as usize;
-        u64::from_le_bytes(self.data[i..i + 8].try_into().unwrap())
+        self.data.get_u64(i as usize)
+    }
+    pub fn get_const_string(&self, i: u16) -> String {
+        self.data.get_string(i as u32)
     }
 }

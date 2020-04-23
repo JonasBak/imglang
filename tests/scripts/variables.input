@@ -27,3 +27,7 @@ fun testFun() {
 }
 var testFunVar = testFun;
 testFunVar();
+
+
+var string = "test string literal";
+print string;
