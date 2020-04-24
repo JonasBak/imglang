@@ -6,12 +6,12 @@ use std::mem;
 struct LocalVariable {
     name: String,
     depth: u16,
-    offset: u16,
+    offset: StackAdr,
     t: AstType,
 }
 #[derive(Debug, Clone)]
 enum GlobalVariable {
-    Function(u16),
+    Function(ChunkAdr),
 }
 enum Variable {
     Local(LocalVariable),
@@ -22,7 +22,7 @@ pub struct Compiler {
     globals: HashMap<String, GlobalVariable>,
     current_scope_depth: u16,
     chunks: Vec<Chunk>,
-    current_chunk: usize,
+    current_chunk: ChunkAdr,
     is_root: bool,
 }
 
@@ -40,7 +40,7 @@ impl Compiler {
         compiler.chunks
     }
     fn chunk(&mut self) -> &mut Chunk {
-        &mut self.chunks[self.current_chunk]
+        &mut self.chunks[self.current_chunk as usize]
     }
     fn declare_variable(&mut self, name: &String, t: AstType) {
         self.variables.push(LocalVariable {
@@ -118,7 +118,7 @@ impl Compiler {
             Ast::FuncDeclaration(name, func, _, _) => {
                 self.globals.insert(
                     name.clone(),
-                    GlobalVariable::Function(self.chunks.len() as u16),
+                    GlobalVariable::Function(self.chunks.len() as ChunkAdr),
                 );
                 self.codegen(func);
                 self.chunk().push_op(OpCode::PopU16 as u8);
@@ -198,7 +198,7 @@ impl Compiler {
                 self.codegen(stmt);
 
                 self.chunk().push_op(OpCode::Jump as u8);
-                self.chunk().push_op_u16(loop_start as u16);
+                self.chunk().push_op_u16(loop_start);
 
                 self.chunk().backpatch_jump(done_jump);
                 self.chunk().push_op(OpCode::PopU8 as u8);
@@ -219,7 +219,7 @@ impl Compiler {
             Ast::Function { body, args, .. } => {
                 let prev_chunk = self.current_chunk;
                 self.chunks.push(Chunk::new());
-                self.current_chunk = self.chunks.len() - 1;
+                self.current_chunk = self.chunks.len() as ChunkAdr - 1;
 
                 let old_variables = mem::replace(&mut self.variables, vec![]);
                 let old_depth = self.current_scope_depth;
@@ -238,7 +238,7 @@ impl Compiler {
                 self.current_scope_depth = old_depth;
                 self.is_root = old_is_root;
 
-                let c = self.current_chunk as u16;
+                let c = self.current_chunk;
 
                 self.current_chunk = prev_chunk;
 

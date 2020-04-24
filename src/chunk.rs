@@ -1,5 +1,4 @@
 use super::*;
-use std::convert::TryInto;
 
 macro_rules! generate_opcodes {
     ($($types:ident,)+) => {
@@ -53,6 +52,9 @@ generate_opcodes!(
     Call,
 );
 
+pub type CodeAdr = u16;
+pub type DataAdr = u16;
+
 pub struct Chunk {
     code: ByteVector,
     data: ByteVector,
@@ -64,57 +66,50 @@ impl Chunk {
             data: ByteVector::new(),
         }
     }
-    pub fn len_code(&self) -> usize {
-        self.code.len()
-    }
-    pub fn len_data(&self) -> usize {
-        self.data.len()
+    pub fn len_code(&self) -> CodeAdr {
+        self.code.len() as CodeAdr
     }
 
-    pub fn push_op(&mut self, op: u8) -> usize {
-        self.code.push_u8(op);
-        self.code.len() - 1
+    pub fn push_op(&mut self, op: u8) -> CodeAdr {
+        self.code.push_u8(op) as CodeAdr
     }
-    pub fn push_op_u16(&mut self, op: u16) -> usize {
-        self.code.push_u16(op);
-        self.code.len() - 2
+    pub fn push_op_u16(&mut self, op: u16) -> CodeAdr {
+        self.code.push_u16(op) as CodeAdr
     }
-    pub fn push_op_u32(&mut self, op: u32) -> usize {
-        self.code.push_u32(op);
-        self.code.len() - 4
+    pub fn push_op_u32(&mut self, op: u32) -> CodeAdr {
+        self.code.push_u32(op) as CodeAdr
     }
 
-    pub fn get_op(&self, ip: usize) -> u8 {
-        self.code.get_u8(ip)
+    pub fn get_op(&self, ip: CodeAdr) -> u8 {
+        self.code.get_u8(ip as Adr)
     }
-    pub fn get_op_u16(&self, ip: usize) -> u16 {
-        self.code.get_u16(ip)
+    pub fn get_op_u16(&self, ip: CodeAdr) -> u16 {
+        self.code.get_u16(ip as Adr)
     }
-    pub fn get_op_u32(&self, ip: usize) -> u32 {
-        self.code.get_u32(ip)
-    }
-
-    pub fn backpatch_jump(&mut self, offset: usize) {
-        let top = self.code.len() as u16;
-        self.code.0[offset..offset + 2].copy_from_slice(&top.to_le_bytes());
+    pub fn get_op_u32(&self, ip: CodeAdr) -> u32 {
+        self.code.get_u32(ip as Adr)
     }
 
-    pub fn add_const_f64(&mut self, data: f64) -> u16 {
-        self.data.push_f64(data);
-        (self.data.len() - 8) as u16
+    pub fn backpatch_jump(&mut self, offset: CodeAdr) {
+        let top = self.code.len() as CodeAdr;
+        self.code.0[offset as usize..offset as usize + 2].copy_from_slice(&top.to_le_bytes());
     }
 
-    pub fn add_const_string(&mut self, data: &String) -> u16 {
-        self.data.push_string(data) as u16
+    pub fn add_const_f64(&mut self, data: f64) -> DataAdr {
+        self.data.push_f64(data) as DataAdr
     }
 
-    pub fn get_const_f64(&self, i: u16) -> f64 {
-        self.data.get_f64(i as usize)
+    pub fn add_const_string(&mut self, data: &String) -> DataAdr {
+        self.data.push_string(data) as DataAdr
     }
-    pub fn get_const_u64(&self, i: u16) -> u64 {
-        self.data.get_u64(i as usize)
+
+    pub fn get_const_f64(&self, i: DataAdr) -> f64 {
+        self.data.get_f64(i as Adr)
+    }
+    pub fn get_const_u64(&self, i: DataAdr) -> u64 {
+        self.data.get_u64(i as Adr)
     }
     pub fn get_const_string(&self, i: u16) -> String {
-        self.data.get_string(i as u32)
+        self.data.get_string(i as Adr)
     }
 }

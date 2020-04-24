@@ -75,28 +75,24 @@ pub fn disassemble_chunk(chunks: &Vec<Chunk>) {
     eprintln!("{:*^64}", "");
 }
 
-fn print_simple(op: OpCode) -> usize {
-    eprintln!("{: >3} {: <28}", op as u8, op);
+fn print_simple(op: OpCode) -> CodeAdr {
+    eprintln!("{:>3} {:<15}", op as u8, op.to_string());
     1
 }
-fn print_unary(op: OpCode, operand: u64) {
-    eprintln!("{: >3} {: <28} {: >8}", op as u8, op, operand);
+fn print_unary_u8(op: OpCode, operand: u8) -> CodeAdr {
+    eprintln!("{:>3} {:<15} {:>3}", op as u8, op.to_string(), operand);
+    2
 }
-fn print_binary(op: OpCode, op_a: u64, op_b: u64) {
-    eprintln!("{: >3} {: <28} {: >8} {: >8}", op as u8, op, op_a, op_b);
+fn print_unary_u16(op: OpCode, operand: u16) -> CodeAdr {
+    eprintln!("{:>3} {:<15} {:>3}", op as u8, op.to_string(), operand);
+    3
 }
 
-pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
+pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
     match OpCode::from(chunk.get_op(ip)) {
         op @ OpCode::Return => print_simple(op),
-        op @ OpCode::ConstantF64 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::ConstantString => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
+        op @ OpCode::ConstantF64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::ConstantString => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::NegateF64 => print_simple(op),
         op @ OpCode::MultiplyF64 => print_simple(op),
         op @ OpCode::DivideF64 => print_simple(op),
@@ -116,53 +112,17 @@ pub fn disassemble(chunk: &Chunk, ip: usize) -> usize {
         op @ OpCode::PrintF64 => print_simple(op),
         op @ OpCode::PrintBool => print_simple(op),
         op @ OpCode::PrintString => print_simple(op),
-        op @ OpCode::VariableU8 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::VariableU16 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::VariableU32 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::VariableU64 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::AssignU8 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::AssignU16 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::AssignU64 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::JumpIfFalse => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::Jump => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::Function => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
-        op @ OpCode::Call => {
-            print_unary(op, chunk.get_op(ip + 1) as u64);
-            2
-        }
-        op @ OpCode::PushU16 => {
-            print_unary(op, chunk.get_op_u16(ip + 1) as u64);
-            3
-        }
+        op @ OpCode::VariableU8 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::VariableU16 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::VariableU32 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::VariableU64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::AssignU8 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::AssignU16 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::AssignU64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::JumpIfFalse => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::Jump => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::Function => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::Call => print_unary_u8(op, chunk.get_op(ip + 1)),
+        op @ OpCode::PushU16 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
     }
 }

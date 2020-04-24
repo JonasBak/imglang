@@ -13,14 +13,15 @@ pub enum AstType {
     String,
 }
 impl AstType {
-    pub fn size(&self) -> u16 {
-        match self {
+    pub fn size(&self) -> StackAdr {
+        let n = match self {
             AstType::Bool => 1,
             AstType::Float => 8,
-            AstType::Function(..) => 2,
-            AstType::String => 4,
+            AstType::Function(..) => mem::size_of::<ChunkAdr>(),
+            AstType::String => mem::size_of::<HeapAdr>(),
             AstType::Nil => 0,
-        }
+        };
+        n as StackAdr
     }
 }
 #[derive(Debug, Clone, PartialEq)]
