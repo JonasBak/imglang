@@ -16,7 +16,6 @@ macro_rules! binary_op_f64{
 
 pub type StackAdr = u16;
 pub type ChunkAdr = u16;
-pub type HeapAdr = u32;
 
 struct CallFrame {
     parent_ip: CodeAdr,
@@ -27,7 +26,7 @@ struct CallFrame {
 
 pub struct VM {
     stack: ByteVector,
-    heap: ByteVector,
+    heap: Heap,
     chunks: Vec<Chunk>,
     call_frames: Vec<CallFrame>,
 }
@@ -36,7 +35,7 @@ impl VM {
     pub fn new(chunks: Vec<Chunk>) -> VM {
         VM {
             stack: ByteVector::new(),
-            heap: ByteVector::new(),
+            heap: Heap::new(),
             chunks,
             call_frames: vec![],
         }
@@ -99,7 +98,7 @@ impl VM {
                 }
                 OpCode::PrintString => {
                     let a = self.stack.pop_u32();
-                    let string = self.heap.get_string(a);
+                    let string = self.heap.get_string_ref(a).unwrap();
                     writeln!(out, "{}", string).unwrap();
                 }
                 OpCode::ConstantF64 => {
@@ -112,7 +111,7 @@ impl VM {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
                     let string_data = chunk.get_const_string(i);
-                    let string = self.heap.push_string(&string_data);
+                    let string = self.heap.add_object(Obj::String(string_data));
                     self.stack.push_u32(string);
                 }
                 OpCode::NegateF64 => {
@@ -208,6 +207,13 @@ impl VM {
                     let v = self.stack.get_u16(top as Adr);
                     self.stack.set_u16(v, (i + frame_offset) as Adr);
                 }
+                OpCode::AssignU32 => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let top = self.len_stack() - 4;
+                    let v = self.stack.get_u32(top as Adr);
+                    self.stack.set_u32(v, (i + frame_offset) as Adr);
+                }
                 OpCode::AssignU64 => {
                     let i = chunk.get_op_u16(ip);
                     ip += 2;
@@ -246,6 +252,16 @@ impl VM {
                     current_chunk = chunk_i;
                     ip = 0;
                     frame_offset = self.len_stack() - args_width;
+                }
+                OpCode::IncreaseRC => {
+                    let top = self.len_stack() - 4;
+                    let v = self.stack.get_u32(top as Adr);
+                    self.heap.increase_rc(v);
+                }
+                OpCode::DecreaseRC => {
+                    let top = self.len_stack() - 4;
+                    let v = self.stack.get_u32(top as Adr);
+                    self.heap.decrease_rc(v);
                 }
             }
         }

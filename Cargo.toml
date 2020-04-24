@@ -11,6 +11,7 @@ debug = ["debug_build", "debug_runtime"]
 
 debug_build = []
 debug_runtime = []
+debug_heap = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

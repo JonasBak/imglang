@@ -1,8 +1,8 @@
 mod chunk;
 mod compiler;
 mod debugger;
+mod heap;
 mod lexer;
-mod object;
 mod parser;
 mod types;
 mod utils;
@@ -11,6 +11,7 @@ mod vm;
 use chunk::*;
 use compiler::*;
 use debugger::*;
+use heap::*;
 use lexer::*;
 use parser::*;
 use std::env;

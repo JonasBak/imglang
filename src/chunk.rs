@@ -45,11 +45,14 @@ generate_opcodes!(
     VariableU64,
     AssignU8,
     AssignU16,
+    AssignU32,
     AssignU64,
     JumpIfFalse,
     Jump,
     Function,
     Call,
+    IncreaseRC,
+    DecreaseRC,
 );
 
 pub type CodeAdr = u16;

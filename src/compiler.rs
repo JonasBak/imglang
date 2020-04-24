@@ -74,7 +74,10 @@ impl Compiler {
                 AstType::Bool => self.chunk().push_op(OpCode::PopU8 as u8),
                 AstType::Function(..) => self.chunk().push_op(OpCode::PopU16 as u8),
                 AstType::Float => self.chunk().push_op(OpCode::PopU64 as u8),
-                AstType::String => self.chunk().push_op(OpCode::PopU32 as u8),
+                AstType::String => {
+                    self.chunk().push_op(OpCode::DecreaseRC as u8);
+                    self.chunk().push_op(OpCode::PopU32 as u8)
+                }
                 AstType::Nil => panic!(),
             };
         }
@@ -113,6 +116,12 @@ impl Compiler {
             }
             Ast::Declaration(name, expr, t) => {
                 self.codegen(expr);
+                match t {
+                    Some(AstType::String) => {
+                        self.chunk().push_op(OpCode::IncreaseRC as u8);
+                    }
+                    _ => {}
+                }
                 self.declare_variable(name, t.clone().unwrap());
             }
             Ast::FuncDeclaration(name, func, _, _) => {
@@ -157,7 +166,7 @@ impl Compiler {
                             AstType::Bool => self.chunk().push_op(OpCode::AssignU8 as u8),
                             AstType::Function(..) => self.chunk().push_op(OpCode::AssignU16 as u8),
                             AstType::Float => self.chunk().push_op(OpCode::AssignU64 as u8),
-                            AstType::String => todo!(),
+                            AstType::String => todo!("handle rc when assigning"),
                             AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
