@@ -63,6 +63,7 @@ impl VM {
             ip = ip + 1;
             match OpCode::from(chunk.get_op(ip - 1)) {
                 OpCode::Return => {
+                    let return_width = chunk.get_op(ip) as StackAdr;
                     if self.call_frames.len() == 0 {
                         return;
                     }
@@ -74,8 +75,6 @@ impl VM {
                         args_width,
                     } = self.call_frames.pop().unwrap();
 
-                    let return_width =
-                        self.len_stack() - frame_offset as StackAdr - args_width as StackAdr;
                     self.stack.0.copy_within(
                         (frame_offset + args_width) as usize..,
                         frame_offset as usize,
@@ -100,6 +99,7 @@ impl VM {
                     let a = self.stack.pop_u32();
                     let string = self.heap.get_string_ref(a).unwrap();
                     writeln!(out, "{}", string).unwrap();
+                    self.heap.decrease_rc(a);
                 }
                 OpCode::ConstantF64 => {
                     let i = chunk.get_op_u16(ip);
@@ -220,6 +220,16 @@ impl VM {
                     let top = self.len_stack() - 8;
                     let v = self.stack.get_u64(top as Adr);
                     self.stack.set_u64(v, (i + frame_offset) as Adr);
+                }
+                OpCode::AssignObj => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let top = self.len_stack() - 4;
+                    let new_val = self.stack.get_u32(top as Adr);
+                    let old_val = self.stack.get_u32((i + frame_offset) as Adr);
+                    self.heap.increase_rc(new_val);
+                    self.heap.decrease_rc(old_val);
+                    self.stack.set_u32(new_val, (i + frame_offset) as Adr);
                 }
                 OpCode::JumpIfFalse => {
                     let offset = chunk.get_op_u16(ip);

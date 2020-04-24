@@ -26,13 +26,13 @@ impl Heap {
             #[cfg(feature = "debug_heap")]
             eprintln!("new object {} filled gap", i);
 
-            self.objects[i as usize] = (0, obj);
+            self.objects[i as usize] = (1, obj);
             i
         } else {
             #[cfg(feature = "debug_heap")]
             eprintln!("new object {}", self.objects.len());
 
-            self.objects.push((0, obj));
+            self.objects.push((1, obj));
             self.objects.len() as HeapAdr - 1
         }
     }

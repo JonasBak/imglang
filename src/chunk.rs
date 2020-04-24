@@ -47,6 +47,7 @@ generate_opcodes!(
     AssignU16,
     AssignU32,
     AssignU64,
+    AssignObj,
     JumpIfFalse,
     Jump,
     Function,

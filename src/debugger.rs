@@ -90,7 +90,7 @@ fn print_unary_u16(op: OpCode, operand: u16) -> CodeAdr {
 
 pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
     match OpCode::from(chunk.get_op(ip)) {
-        op @ OpCode::Return => print_simple(op),
+        op @ OpCode::Return => print_unary_u8(op, chunk.get_op(ip + 1)),
         op @ OpCode::ConstantF64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::ConstantString => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::NegateF64 => print_simple(op),
@@ -120,6 +120,7 @@ pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
         op @ OpCode::AssignU16 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::AssignU32 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::AssignU64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::AssignObj => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::JumpIfFalse => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::Jump => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::Function => print_unary_u16(op, chunk.get_op_u16(ip + 1)),

@@ -55,6 +55,7 @@ pub enum TokenType {
     TypeFloat,
     TypeBool,
     TypeNil,
+    TypeString,
 
     Eof,
 }
@@ -277,6 +278,7 @@ pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
                     "while" => TokenType::While,
                     "float" => TokenType::TypeFloat,
                     "bool" => TokenType::TypeBool,
+                    "str" => TokenType::TypeString,
                     _ => TokenType::Identifier(val),
                 },
                 _ => t.t,

@@ -7,7 +7,7 @@ edition = "2018"
 [features]
 default = []
 
-debug = ["debug_build", "debug_runtime"]
+debug = ["debug_build", "debug_runtime", "debug_heap"]
 
 debug_build = []
 debug_runtime = []

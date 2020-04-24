@@ -23,6 +23,12 @@ impl AstType {
         };
         n as StackAdr
     }
+    pub fn is_obj(&self) -> bool {
+        match self {
+            AstType::String => true,
+            _ => false,
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
@@ -115,7 +121,7 @@ impl TypeChecker {
                 t.replace(expr_t);
                 AstType::Nil
             }
-            Ast::Return(expr) => {
+            Ast::Return(expr, t) => {
                 if self.is_root {
                     return Err(TypeError::Other(
                         "can't return from root function".to_string(),
@@ -126,6 +132,7 @@ impl TypeChecker {
                 } else {
                     AstType::Nil
                 };
+                t.replace(expr_t.clone());
                 self.return_values.push(expr_t);
                 AstType::Nil
             }

@@ -68,18 +68,48 @@ impl Compiler {
         }
         self.globals.get(name).map(|v| Variable::Global(v.clone()))
     }
+    fn pop_type(&mut self, t: &AstType) {
+        match t {
+            AstType::Bool => {
+                self.chunk().push_op(OpCode::PopU8 as u8);
+            }
+            AstType::Function(..) => {
+                self.chunk().push_op(OpCode::PopU16 as u8);
+            }
+            AstType::Float => {
+                self.chunk().push_op(OpCode::PopU64 as u8);
+            }
+            AstType::String => {
+                self.chunk().push_op(OpCode::DecreaseRC as u8);
+                self.chunk().push_op(OpCode::PopU32 as u8);
+            }
+            AstType::Nil => {}
+        };
+    }
+    fn push_return(&mut self, expr: &Option<Box<Ast>>, t: &AstType) {
+        if let Some(expr) = expr {
+            self.codegen(expr);
+        }
+        let objects: Vec<StackAdr> = self
+            .variables
+            .iter_mut()
+            .filter(|v| v.t.is_obj())
+            .map(|v| v.offset)
+            .collect();
+        for obj_var in objects.into_iter() {
+            // TODO change to OpCode::DecreaseRCAt or something to get fewer ops
+            self.chunk().push_op(OpCode::VariableU32 as u8);
+            self.chunk().push_op_u16(obj_var);
+            self.chunk().push_op(OpCode::DecreaseRC as u8);
+            self.chunk().push_op(OpCode::PopU32 as u8);
+        }
+        self.chunk().push_op(OpCode::Return as u8);
+        self.chunk().push_op(t.size() as u8);
+    }
     fn pop_variables(&mut self) {
         while self.variables.last().map(|v| v.depth).unwrap_or(0) > self.current_scope_depth {
-            match self.variables.pop().unwrap().t {
-                AstType::Bool => self.chunk().push_op(OpCode::PopU8 as u8),
-                AstType::Function(..) => self.chunk().push_op(OpCode::PopU16 as u8),
-                AstType::Float => self.chunk().push_op(OpCode::PopU64 as u8),
-                AstType::String => {
-                    self.chunk().push_op(OpCode::DecreaseRC as u8);
-                    self.chunk().push_op(OpCode::PopU32 as u8)
-                }
-                AstType::Nil => panic!(),
-            };
+            let t = self.variables.pop().unwrap().t;
+            self.pop_type(&t);
         }
     }
     fn codegen(&mut self, ast: &Ast) {
@@ -89,6 +119,7 @@ impl Compiler {
                     self.codegen(p);
                 }
                 self.chunk().push_op(OpCode::Return as u8);
+                self.chunk().push_op(0);
             }
             Ast::Block(ps) => {
                 self.current_scope_depth += 1;
@@ -101,27 +132,24 @@ impl Compiler {
             Ast::Print(expr, t) => {
                 self.codegen(expr);
                 match t.as_ref().unwrap() {
-                    AstType::Float => self.chunk().push_op(OpCode::PrintF64 as u8),
-                    AstType::Bool => self.chunk().push_op(OpCode::PrintBool as u8),
+                    AstType::Float => {
+                        self.chunk().push_op(OpCode::PrintF64 as u8);
+                    }
+                    AstType::Bool => {
+                        self.chunk().push_op(OpCode::PrintBool as u8);
+                    }
                     AstType::Function(..) => todo!(),
                     AstType::Nil => todo!(),
-                    AstType::String => self.chunk().push_op(OpCode::PrintString as u8),
+                    AstType::String => {
+                        self.chunk().push_op(OpCode::PrintString as u8);
+                    }
                 };
             }
-            Ast::Return(expr) => {
-                if let Some(expr) = expr {
-                    self.codegen(expr);
-                }
-                self.chunk().push_op(OpCode::Return as u8);
+            Ast::Return(expr, t) => {
+                self.push_return(expr, t.as_ref().unwrap());
             }
             Ast::Declaration(name, expr, t) => {
                 self.codegen(expr);
-                match t {
-                    Some(AstType::String) => {
-                        self.chunk().push_op(OpCode::IncreaseRC as u8);
-                    }
-                    _ => {}
-                }
                 self.declare_variable(name, t.clone().unwrap());
             }
             Ast::FuncDeclaration(name, func, _, _) => {
@@ -148,6 +176,9 @@ impl Compiler {
                             AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
+                        if t.as_ref().unwrap().is_obj() {
+                            self.chunk().push_op(OpCode::IncreaseRC as u8);
+                        }
                     }
                     Variable::Global(GlobalVariable::Function(chunk_i)) => {
                         self.chunk().push_op(OpCode::PushU16 as u8);
@@ -166,7 +197,7 @@ impl Compiler {
                             AstType::Bool => self.chunk().push_op(OpCode::AssignU8 as u8),
                             AstType::Function(..) => self.chunk().push_op(OpCode::AssignU16 as u8),
                             AstType::Float => self.chunk().push_op(OpCode::AssignU64 as u8),
-                            AstType::String => todo!("handle rc when assigning"),
+                            AstType::String => self.chunk().push_op(OpCode::AssignObj as u8),
                             AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
@@ -214,18 +245,9 @@ impl Compiler {
             }
             Ast::ExprStatement(expr, t) => {
                 self.codegen(expr);
-                match t.as_ref().unwrap() {
-                    AstType::Bool => {
-                        self.chunk().push_op(OpCode::PopU8 as u8);
-                    }
-                    AstType::Float => {
-                        self.chunk().push_op(OpCode::PopU64 as u8);
-                    }
-                    AstType::Nil => (),
-                    _ => todo!(),
-                };
+                self.pop_type(t.as_ref().unwrap());
             }
-            Ast::Function { body, args, .. } => {
+            Ast::Function { body, args, ret_t } => {
                 let prev_chunk = self.current_chunk;
                 self.chunks.push(Chunk::new());
                 self.current_chunk = self.chunks.len() as ChunkAdr - 1;
@@ -241,7 +263,9 @@ impl Compiler {
                 }
 
                 self.codegen(body);
-                self.chunk().push_op(OpCode::Return as u8);
+                if *ret_t == AstType::Nil {
+                    self.push_return(&None, &AstType::Nil);
+                }
 
                 mem::replace(&mut self.variables, old_variables);
                 self.current_scope_depth = old_depth;
