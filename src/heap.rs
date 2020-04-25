@@ -25,8 +25,8 @@ impl Heap {
         self.objects
             .iter()
             .filter(|o| match o.1 {
-                Obj::Free => true,
-                _ => false,
+                Obj::Free => false,
+                _ => true,
             })
             .count() as HeapAdr
     }
