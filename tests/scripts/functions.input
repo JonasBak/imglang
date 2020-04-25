@@ -71,3 +71,13 @@ fun callArg(f <>) {
 }
 callArg(arg1);
 callArg(arg2);
+
+// stack is popped correctly when using local variables in function body
+fun withVarBody() bool {
+  var a = false;
+  var b = true;
+  var c = false;
+  var d = false;
+  return b;
+}
+print withVarBody();

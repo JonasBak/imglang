@@ -21,6 +21,16 @@ impl Heap {
         }
     }
 
+    pub fn count_objects(&self) -> HeapAdr {
+        self.objects
+            .iter()
+            .filter(|o| match o.1 {
+                Obj::Free => true,
+                _ => false,
+            })
+            .count() as HeapAdr
+    }
+
     pub fn add_object(&mut self, obj: Obj) -> HeapAdr {
         if let Some(i) = self.gaps.pop() {
             #[cfg(feature = "debug_heap")]

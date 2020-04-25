@@ -43,6 +43,12 @@ impl VM {
     pub fn len_stack(&self) -> StackAdr {
         self.stack.len() as StackAdr
     }
+    pub fn stack_ptr(&self) -> &ByteVector {
+        &self.stack
+    }
+    pub fn heap_ptr(&self) -> &Heap {
+        &self.heap
+    }
     pub fn run(&mut self, out: &mut dyn Write) {
         let mut ip: CodeAdr = 0;
         let mut current_chunk: ChunkAdr = 0;
@@ -72,13 +78,13 @@ impl VM {
                         parent_ip,
                         parent_chunk,
                         parent_frame_offset,
-                        args_width,
+                        ..
                     } = self.call_frames.pop().unwrap();
 
-                    self.stack.0.copy_within(
-                        (frame_offset + args_width) as usize..,
-                        frame_offset as usize,
-                    );
+                    let return_pos = self.len_stack() - return_width;
+                    self.stack
+                        .0
+                        .copy_within(return_pos as usize.., frame_offset as usize);
                     self.stack
                         .0
                         .truncate((frame_offset + return_width) as usize);

@@ -32,6 +32,16 @@ fn variables() {
 }
 
 #[test]
+fn if_else() {
+    test_script("tests/scripts/if_else");
+}
+
+#[test]
+fn test_while() {
+    test_script("tests/scripts/while");
+}
+
+#[test]
 fn functions() {
     test_script("tests/scripts/functions");
 }

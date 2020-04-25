@@ -1,0 +1,25 @@
+var a = 100;
+
+if (a >= 100) {
+  print "a >= 100";
+}
+print "done1";
+
+if (a < 100) {
+  print "a > 100";
+}
+print "done2";
+
+if (a == 100) {
+  print "if branch";
+} else {
+  print "else branch";
+}
+print "done3";
+
+if (a != 100) {
+  print "pls no";
+} else {
+  print "yay";
+}
+print "done4";
