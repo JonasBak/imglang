@@ -225,9 +225,6 @@ impl TypeChecker {
 
                 let body_t = self.annotate_type(body)?;
 
-                // TODO allow "expression functions" to not specify type, and take it from body_t
-                // would require all function declarations to only use blocks, as globals
-                // needs to have a known return type before typechecking
                 // TODO check for divergence and potential "leftouts" that default to nil
                 if self.return_values.len() == 0 {
                     if body_t != *ret_t {

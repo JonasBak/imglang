@@ -46,12 +46,30 @@ fn count_objects_nested_scopes() {
         {
             var a = "heap 1";
             var b = "heap 2";
-            var c = "heap 3";
+            {
+                var c = "heap 3";
+            }
             a = b = a = b = a;
         }
     "#,
     );
     assert_eq!(vm.heap_ptr().count_objects(), 0);
+}
+
+#[test]
+fn count_objects_shadowed_variables() {
+    let vm = run_script(
+        r#"
+        var a = "heap 1";
+        {
+            var b = "heap 2";
+            {
+                var a = b;
+            }
+        }
+    "#,
+    );
+    assert_eq!(vm.heap_ptr().count_objects(), 1);
 }
 
 #[test]

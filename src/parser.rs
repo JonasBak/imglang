@@ -503,7 +503,8 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
     let body = if lexer.current_t() == TokenType::LeftBrace {
         statement(lexer)?
     } else {
-        expression(lexer)?
+        let ret_expr = expression(lexer)?;
+        Ast::Block(vec![Ast::Return(Some(Box::new(ret_expr)), None)])
     };
     Ok(Ast::Function {
         body: Box::new(body),
