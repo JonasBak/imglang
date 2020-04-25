@@ -47,7 +47,10 @@ fn main() {
     #[cfg(feature = "debug_build")]
     eprintln!("{:?}", ast);
 
-    TypeChecker::annotate_types(&mut ast).unwrap();
+    if let Err(error) = TypeChecker::annotate_types(&mut ast) {
+        print_type_error(&source, error);
+        return;
+    }
     let chunks = Compiler::compile(&ast);
 
     #[cfg(feature = "debug_build")]

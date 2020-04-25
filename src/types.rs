@@ -32,13 +32,9 @@ impl AstType {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
-    NotAllowed(AstType),
-    Mismatch(AstType, AstType),
-    NotDefined(String),
-    NotCallable(String),
-    NotAssignable(String),
-    BadCallSignature(String),
-    Other(String),
+    Error(String, usize),
+
+    BlockErrors(Vec<TypeError>),
 }
 
 #[derive(Debug, Clone)]
@@ -96,35 +92,52 @@ impl TypeChecker {
     fn annotate_type(&mut self, ast: &mut Ast) -> Result<AstType, TypeError> {
         let t = match ast {
             Ast::Program(ps) => {
+                let mut errors = Vec::new();
                 for p in ps.iter_mut() {
-                    self.annotate_type(p)?;
+                    match self.annotate_type(p) {
+                        Ok(_) => {}
+                        Err(error) => errors.push(error),
+                    }
+                }
+                if errors.len() > 0 {
+                    return Err(TypeError::BlockErrors(errors));
                 }
                 AstType::Nil
             }
-            Ast::Block(ps) => {
+            Ast::Block(ps, pos) => {
+                let mut errors = Vec::new();
                 self.current_scope_depth += 1;
                 for p in ps.iter_mut() {
-                    self.annotate_type(p)?;
+                    match self.annotate_type(p) {
+                        Ok(_) => {}
+                        Err(error) => errors.push(error),
+                    }
                 }
                 self.current_scope_depth -= 1;
                 while self.variables.last().map(|v| v.depth).unwrap_or(0) > self.current_scope_depth
                 {
                     self.variables.pop();
                 }
+                if errors.len() > 0 {
+                    return Err(TypeError::BlockErrors(errors));
+                }
                 AstType::Nil
             }
-            Ast::Print(expr, t) => {
+            Ast::Print(expr, t, pos) => {
                 let expr_t = match self.annotate_type(expr)? {
                     t @ AstType::Bool | t @ AstType::Float | t @ AstType::String => t,
-                    t @ _ => return Err(TypeError::NotAllowed(t)),
+                    t @ _ => {
+                        return Err(TypeError::Error(format!("cannot print type {:?}", t), *pos))
+                    }
                 };
                 t.replace(expr_t);
                 AstType::Nil
             }
-            Ast::Return(expr, t) => {
+            Ast::Return(expr, t, pos) => {
                 if self.is_root {
-                    return Err(TypeError::Other(
+                    return Err(TypeError::Error(
                         "can't return from root function".to_string(),
+                        *pos,
                     ));
                 }
                 let expr_t = if let Some(expr) = expr {
@@ -136,31 +149,33 @@ impl TypeChecker {
                 self.return_values.push(expr_t);
                 AstType::Nil
             }
-            Ast::Declaration(name, expr, t) => {
+            Ast::Declaration(name, expr, t, pos) => {
                 let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t.clone());
                 self.declare_variable(name, expr_t);
                 AstType::Nil
             }
-            Ast::FuncDeclaration(name, func, args_t, t) => {
+            Ast::FuncDeclaration(name, func, args_t, t, pos) => {
                 if self.is_root && self.current_scope_depth == 0 {
                     self.globals.insert(
                         name.clone(),
                         AstType::Function(args_t.clone(), Box::new(t.clone())),
                     );
                 } else {
-                    return Err(TypeError::Other(
+                    return Err(TypeError::Error(
                         "global function declarations are only allowed at the top level"
                             .to_string(),
+                        *pos,
                     ));
                 }
                 self.annotate_type(func)?;
                 AstType::Nil
             }
-            Ast::Variable(name, t) => {
-                let v = self
-                    .resolve_variable(name)
-                    .ok_or(TypeError::NotDefined(name.clone()))?;
+            Ast::Variable(name, t, pos) => {
+                let v = self.resolve_variable(name).ok_or(TypeError::Error(
+                    format!("variable {} is not defined", name),
+                    *pos,
+                ))?;
                 match v {
                     Variable::Local(local) => {
                         t.replace(local.t.clone());
@@ -172,25 +187,39 @@ impl TypeChecker {
                     }
                 }
             }
-            Ast::Assign(name, expr, t) => {
-                let v_t = match self
-                    .resolve_variable(name)
-                    .ok_or(TypeError::NotDefined(name.clone()))?
-                {
+            Ast::Assign(name, expr, t, pos) => {
+                let v_t = match self.resolve_variable(name).ok_or(TypeError::Error(
+                    format!("variable {} is not defined", name),
+                    *pos,
+                ))? {
                     Variable::Local(local) => local.t.clone(),
-                    Variable::Global(_) => return Err(TypeError::NotAssignable(name.clone())),
+                    Variable::Global(_) => {
+                        return Err(TypeError::Error(
+                            format!("can't assign to global variable {}", name),
+                            *pos,
+                        ))
+                    }
                 };
                 let expr_t = self.annotate_type(expr)?;
                 if v_t != expr_t {
-                    return Err(TypeError::Mismatch(v_t, expr_t));
+                    return Err(TypeError::Error(
+                        format!(
+                            "cannot assign value of type {:?} to variable with type {:?}",
+                            expr_t, v_t
+                        ),
+                        *pos,
+                    ));
                 }
                 t.replace(expr_t);
                 v_t
             }
-            Ast::If(expr, stmt, else_stmt) => {
+            Ast::If(expr, stmt, else_stmt, pos) => {
                 let expr_t = self.annotate_type(expr)?;
                 if expr_t != AstType::Bool {
-                    return Err(TypeError::NotAllowed(expr_t));
+                    return Err(TypeError::Error(
+                        "condition must be a bool".to_string(),
+                        *pos,
+                    ));
                 }
                 self.annotate_type(stmt)?;
                 if let Some(else_stmt) = else_stmt {
@@ -198,20 +227,28 @@ impl TypeChecker {
                 }
                 AstType::Nil
             }
-            Ast::While(expr, stmt) => {
+            Ast::While(expr, stmt, pos) => {
                 let expr_t = self.annotate_type(expr)?;
                 if expr_t != AstType::Bool {
-                    return Err(TypeError::NotAllowed(expr_t));
+                    return Err(TypeError::Error(
+                        "condition must be a bool".to_string(),
+                        *pos,
+                    ));
                 }
                 self.annotate_type(stmt)?;
                 AstType::Nil
             }
-            Ast::ExprStatement(expr, t) => {
+            Ast::ExprStatement(expr, t, pos) => {
                 let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t);
                 AstType::Nil
             }
-            Ast::Function { body, args, ret_t } => {
+            Ast::Function {
+                body,
+                args,
+                ret_t,
+                position,
+            } => {
                 let old_variables = mem::replace(&mut self.variables, vec![]);
                 let old_return_values = mem::replace(&mut self.return_values, vec![]);
                 let old_depth = self.current_scope_depth;
@@ -226,16 +263,11 @@ impl TypeChecker {
                 let body_t = self.annotate_type(body)?;
 
                 // TODO check for divergence and potential "leftouts" that default to nil
-                if self.return_values.len() == 0 {
-                    if body_t != *ret_t {
-                        return Err(TypeError::Other(
-                            "explicit return statement required".to_string(),
-                        ));
-                    }
-                } else {
-                    if let Some(t) = self.return_values.iter().filter(|t| *t != ret_t).next() {
-                        return Err(TypeError::Mismatch(ret_t.clone(), t.clone()));
-                    }
+                if let Some(t) = self.return_values.iter().filter(|t| *t != ret_t).next() {
+                    return Err(TypeError::Error(
+                        format!("return type {:?} doesn't match signature {:?}", t, ret_t),
+                        *position,
+                    ));
                 }
 
                 mem::replace(&mut self.variables, old_variables);
@@ -248,7 +280,7 @@ impl TypeChecker {
                     Box::new(ret_t.clone()),
                 )
             }
-            Ast::Call(ident, args, args_width) => {
+            Ast::Call(ident, args, args_width, pos) => {
                 let ident_t = self.annotate_type(ident)?;
                 let mut args_t = vec![];
                 for arg in args.iter_mut() {
@@ -256,56 +288,82 @@ impl TypeChecker {
                 }
                 let (func_args_t, ret_t) = match ident_t {
                     AstType::Function(a, r) => (a, r),
-                    _ => return Err(TypeError::NotCallable("TODO".to_string())),
+                    t @ _ => {
+                        return Err(TypeError::Error(format!("cannot call type {:?}", t), *pos))
+                    }
                 };
                 if args_t != func_args_t {
-                    return Err(TypeError::BadCallSignature("TODO".to_string()));
+                    return Err(TypeError::Error(
+                        format!(
+                            "arguments doesn't match, requires {:?}, got {:?}",
+                            func_args_t, args_t
+                        ),
+                        *pos,
+                    ));
                 }
                 args_width.replace(args_t.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8);
                 *ret_t.clone()
             }
-            Ast::Float(_) => AstType::Float,
-            Ast::Bool(_) => AstType::Bool,
-            Ast::String(_) => AstType::String,
-            Ast::Negate(a) => self.annotate_type(a)?,
-            Ast::Not(a) => {
-                self.annotate_type(a)?;
+            Ast::Float(_, _) => AstType::Float,
+            Ast::Bool(_, _) => AstType::Bool,
+            Ast::String(_, _) => AstType::String,
+            Ast::Negate(a, _) => self.annotate_type(a)?,
+            Ast::Not(a, pos) => {
+                let t = self.annotate_type(a)?;
+                if t != AstType::Bool {
+                    return Err(TypeError::Error(
+                        "not (!) operation requires a bool".to_string(),
+                        *pos,
+                    ));
+                }
                 AstType::Bool
             }
-            Ast::Multiply(l, r, t)
-            | Ast::Divide(l, r, t)
-            | Ast::Add(l, r, t)
-            | Ast::Sub(l, r, t) => {
+            Ast::Multiply(l, r, t, pos)
+            | Ast::Divide(l, r, t, pos)
+            | Ast::Add(l, r, t, pos)
+            | Ast::Sub(l, r, t, pos) => {
                 let t_l = self.annotate_type(l)?;
                 let t_r = self.annotate_type(r)?;
                 if t_l != t_r {
-                    return Err(TypeError::Mismatch(t_l, t_r));
+                    return Err(TypeError::Error(
+                        format!(
+                            "type of left operand ({:?}) doesn't match type of right ({:?})",
+                            t_l, t_r
+                        ),
+                        *pos,
+                    ));
                 }
                 t.replace(t_r.clone());
                 t_r
             }
-            Ast::Equal(l, r, t)
-            | Ast::NotEqual(l, r, t)
-            | Ast::Greater(l, r, t)
-            | Ast::GreaterEqual(l, r, t)
-            | Ast::Lesser(l, r, t)
-            | Ast::LesserEqual(l, r, t) => {
+            Ast::Equal(l, r, t, pos)
+            | Ast::NotEqual(l, r, t, pos)
+            | Ast::Greater(l, r, t, pos)
+            | Ast::GreaterEqual(l, r, t, pos)
+            | Ast::Lesser(l, r, t, pos)
+            | Ast::LesserEqual(l, r, t, pos) => {
                 let t_l = self.annotate_type(l)?;
                 let t_r = self.annotate_type(r)?;
                 if t_l != t_r {
-                    return Err(TypeError::Mismatch(t_l, t_r));
+                    return Err(TypeError::Error(
+                        format!(
+                            "type of left operand ({:?}) doesn't match type of right ({:?})",
+                            t_l, t_r
+                        ),
+                        *pos,
+                    ));
                 }
                 t.replace(t_r);
                 AstType::Bool
             }
-            Ast::And(l, r) | Ast::Or(l, r) => {
+            Ast::And(l, r, pos) | Ast::Or(l, r, pos) => {
                 let t_l = self.annotate_type(l)?;
                 let t_r = self.annotate_type(r)?;
-                if t_l != AstType::Bool {
-                    return Err(TypeError::NotAllowed(t_l));
-                }
-                if t_r != AstType::Bool {
-                    return Err(TypeError::NotAllowed(t_r));
+                if t_l != AstType::Bool || t_r != AstType::Bool {
+                    return Err(TypeError::Error(
+                        "operation requires both operands to be bool".to_string(),
+                        *pos,
+                    ));
                 }
                 AstType::Bool
             }

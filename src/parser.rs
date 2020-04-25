@@ -3,49 +3,50 @@ use super::*;
 #[derive(Debug, Clone)]
 pub enum Ast {
     Program(Vec<Ast>),
-    Block(Vec<Ast>),
-    Print(Box<Ast>, Option<AstType>),
-    Return(Option<Box<Ast>>, Option<AstType>),
+    Block(Vec<Ast>, usize),
+    Print(Box<Ast>, Option<AstType>, usize),
+    Return(Option<Box<Ast>>, Option<AstType>, usize),
 
-    Declaration(String, Box<Ast>, Option<AstType>),
-    FuncDeclaration(String, Box<Ast>, Vec<AstType>, AstType),
-    Variable(String, Option<AstType>),
-    Assign(String, Box<Ast>, Option<AstType>),
+    Declaration(String, Box<Ast>, Option<AstType>, usize),
+    FuncDeclaration(String, Box<Ast>, Vec<AstType>, AstType, usize),
+    Variable(String, Option<AstType>, usize),
+    Assign(String, Box<Ast>, Option<AstType>, usize),
 
-    If(Box<Ast>, Box<Ast>, Option<Box<Ast>>),
-    While(Box<Ast>, Box<Ast>),
+    If(Box<Ast>, Box<Ast>, Option<Box<Ast>>, usize),
+    While(Box<Ast>, Box<Ast>, usize),
 
-    ExprStatement(Box<Ast>, Option<AstType>),
+    ExprStatement(Box<Ast>, Option<AstType>, usize),
 
     Function {
         body: Box<Ast>,
         args: Vec<(String, AstType)>,
         ret_t: AstType,
+        position: usize,
     },
-    Call(Box<Ast>, Vec<Ast>, Option<u8>),
+    Call(Box<Ast>, Vec<Ast>, Option<u8>, usize),
 
-    Float(f64),
-    Bool(bool),
+    Float(f64, usize),
+    Bool(bool, usize),
 
-    String(String),
+    String(String, usize),
 
-    Negate(Box<Ast>),
-    Not(Box<Ast>),
+    Negate(Box<Ast>, usize),
+    Not(Box<Ast>, usize),
 
-    Multiply(Box<Ast>, Box<Ast>, Option<AstType>),
-    Divide(Box<Ast>, Box<Ast>, Option<AstType>),
-    Add(Box<Ast>, Box<Ast>, Option<AstType>),
-    Sub(Box<Ast>, Box<Ast>, Option<AstType>),
+    Multiply(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    Divide(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    Add(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    Sub(Box<Ast>, Box<Ast>, Option<AstType>, usize),
 
-    Equal(Box<Ast>, Box<Ast>, Option<AstType>),
-    NotEqual(Box<Ast>, Box<Ast>, Option<AstType>),
-    Greater(Box<Ast>, Box<Ast>, Option<AstType>),
-    GreaterEqual(Box<Ast>, Box<Ast>, Option<AstType>),
-    Lesser(Box<Ast>, Box<Ast>, Option<AstType>),
-    LesserEqual(Box<Ast>, Box<Ast>, Option<AstType>),
+    Equal(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    NotEqual(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    Greater(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    GreaterEqual(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    Lesser(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    LesserEqual(Box<Ast>, Box<Ast>, Option<AstType>, usize),
 
-    And(Box<Ast>, Box<Ast>),
-    Or(Box<Ast>, Box<Ast>),
+    And(Box<Ast>, Box<Ast>, usize),
+    Or(Box<Ast>, Box<Ast>, usize),
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -94,6 +95,10 @@ fn parse_type(lexer: &mut Lexer) -> ParserResult<Option<AstType>> {
         TokenType::TypeString => {
             lexer.next();
             AstType::String
+        }
+        TokenType::TypeNil => {
+            lexer.next();
+            AstType::Nil
         }
         TokenType::Lesser => {
             lexer.next();
@@ -189,10 +194,7 @@ fn parse_precedence(lexer: &mut Lexer, prec: u32) -> ParserResult<Ast> {
     lexer.next().unwrap();
 
     let prefix_rule = get_rule(&lexer.prev_t().unwrap()).0.ok_or_else(|| {
-        ParserError::Unexpected(
-            lexer.prev().unwrap(),
-            "unexpected token in prefix prosition",
-        )
+        ParserError::Unexpected(lexer.prev().unwrap(), "unexpected token in prefix position")
     })?;
 
     let mut lhs = prefix_rule(lexer)?;
@@ -200,7 +202,7 @@ fn parse_precedence(lexer: &mut Lexer, prec: u32) -> ParserResult<Ast> {
     while prec <= get_rule(&lexer.current_t()).2 {
         lexer.next();
         let infix_rule = get_rule(&lexer.prev_t().unwrap()).1.ok_or_else(|| {
-            ParserError::Unexpected(lexer.prev().unwrap(), "unexpected token in infix prosition")
+            ParserError::Unexpected(lexer.prev().unwrap(), "unexpected token in infix position")
         })?;
         lhs = infix_rule(lexer, lhs)?;
     }
@@ -209,11 +211,12 @@ fn parse_precedence(lexer: &mut Lexer, prec: u32) -> ParserResult<Ast> {
 }
 
 fn literal(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let ast = match lexer.prev_t().unwrap() {
-        TokenType::Float(f) => Ast::Float(f),
-        TokenType::True => Ast::Bool(true),
-        TokenType::False => Ast::Bool(false),
-        TokenType::String(s) => Ast::String(s),
+        TokenType::Float(f) => Ast::Float(f, pos),
+        TokenType::True => Ast::Bool(true, pos),
+        TokenType::False => Ast::Bool(false, pos),
+        TokenType::String(s) => Ast::String(s, pos),
         _ => {
             return Err(ParserError::Unexpected(
                 lexer.prev().unwrap(),
@@ -229,11 +232,12 @@ fn expression(lexer: &mut Lexer) -> ParserResult<Ast> {
 }
 
 fn unary(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let t = lexer.prev_t().unwrap();
     let expr = parse_precedence(lexer, PREC_UNARY)?;
     let ast = match t {
-        TokenType::Minus => Ast::Negate(Box::new(expr)),
-        TokenType::Bang => Ast::Not(Box::new(expr)),
+        TokenType::Minus => Ast::Negate(Box::new(expr), pos),
+        TokenType::Bang => Ast::Not(Box::new(expr), pos),
         _ => {
             return Err(ParserError::Unexpected(
                 lexer.prev().unwrap(),
@@ -245,20 +249,21 @@ fn unary(lexer: &mut Lexer) -> ParserResult<Ast> {
 }
 
 fn binary(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let t = lexer.prev_t().unwrap();
     let rule = get_rule(&t);
     let rhs = parse_precedence(lexer, rule.2 + 1)?;
     let ast = match t {
-        TokenType::Star => Ast::Multiply(Box::new(lhs), Box::new(rhs), None),
-        TokenType::Slash => Ast::Divide(Box::new(lhs), Box::new(rhs), None),
-        TokenType::Plus => Ast::Add(Box::new(lhs), Box::new(rhs), None),
-        TokenType::Minus => Ast::Sub(Box::new(lhs), Box::new(rhs), None),
-        TokenType::EqualEqual => Ast::Equal(Box::new(lhs), Box::new(rhs), None),
-        TokenType::BangEqual => Ast::NotEqual(Box::new(lhs), Box::new(rhs), None),
-        TokenType::Greater => Ast::Greater(Box::new(lhs), Box::new(rhs), None),
-        TokenType::GreaterEqual => Ast::GreaterEqual(Box::new(lhs), Box::new(rhs), None),
-        TokenType::Lesser => Ast::Lesser(Box::new(lhs), Box::new(rhs), None),
-        TokenType::LesserEqual => Ast::LesserEqual(Box::new(lhs), Box::new(rhs), None),
+        TokenType::Star => Ast::Multiply(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::Slash => Ast::Divide(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::Plus => Ast::Add(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::Minus => Ast::Sub(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::EqualEqual => Ast::Equal(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::BangEqual => Ast::NotEqual(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::Greater => Ast::Greater(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::GreaterEqual => Ast::GreaterEqual(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::Lesser => Ast::Lesser(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::LesserEqual => Ast::LesserEqual(Box::new(lhs), Box::new(rhs), None, pos),
         _ => {
             return Err(ParserError::Unexpected(
                 lexer.prev().unwrap(),
@@ -294,6 +299,7 @@ fn declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
 }
 
 fn var_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let name = parse_variable(lexer)?;
 
     consume(
@@ -309,7 +315,7 @@ fn var_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
         "expected ';' after declaration",
     )?;
 
-    Ok(Ast::Declaration(name, Box::new(expr), None))
+    Ok(Ast::Declaration(name, Box::new(expr), None, pos))
 }
 
 fn parse_variable(lexer: &mut Lexer) -> ParserResult<String> {
@@ -332,6 +338,7 @@ fn variable(lexer: &mut Lexer) -> ParserResult<Ast> {
 }
 
 fn named_variable(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let name = match lexer.prev_t().unwrap() {
         TokenType::Identifier(name) => name,
         _ => {
@@ -345,9 +352,9 @@ fn named_variable(lexer: &mut Lexer) -> ParserResult<Ast> {
         TokenType::Equal => {
             lexer.next();
             let expr = expression(lexer)?;
-            Ok(Ast::Assign(name, Box::new(expr), None))
+            Ok(Ast::Assign(name, Box::new(expr), None, pos))
         }
-        _ => Ok(Ast::Variable(name, None)),
+        _ => Ok(Ast::Variable(name, None, pos)),
     }
 }
 
@@ -378,16 +385,18 @@ fn statement(lexer: &mut Lexer) -> ParserResult<Ast> {
 }
 
 fn print_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let expr = expression(lexer)?;
     consume(
         lexer,
         |t| t == &TokenType::Semicolon,
         "expected ';' after print statement",
     )?;
-    Ok(Ast::Print(Box::new(expr), None))
+    Ok(Ast::Print(Box::new(expr), None, pos))
 }
 
 fn if_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     consume(lexer, |t| t == &TokenType::LeftPar, "expected '(' after if")?;
     let expr = expression(lexer)?;
     consume(
@@ -403,10 +412,11 @@ fn if_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
         }
         _ => None,
     };
-    Ok(Ast::If(Box::new(expr), Box::new(stmt), else_stmt))
+    Ok(Ast::If(Box::new(expr), Box::new(stmt), else_stmt, pos))
 }
 
 fn block(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let mut parsed = vec![];
     let mut errors = vec![];
     while match lexer.current_t() {
@@ -432,27 +442,31 @@ fn block(lexer: &mut Lexer) -> ParserResult<Ast> {
     if errors.len() > 0 {
         Err(ParserError::BlockErrors(errors))
     } else {
-        Ok(Ast::Block(parsed))
+        Ok(Ast::Block(parsed, pos))
     }
 }
 
 fn expression_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let expr = expression(lexer)?;
     consume(lexer, |t| t == &TokenType::Semicolon, "expected ';'")?;
-    Ok(Ast::ExprStatement(Box::new(expr), None))
+    Ok(Ast::ExprStatement(Box::new(expr), None, pos))
 }
 
 fn logic_and(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let rhs = parse_precedence(lexer, PREC_AND)?;
-    Ok(Ast::And(Box::new(lhs), Box::new(rhs)))
+    Ok(Ast::And(Box::new(lhs), Box::new(rhs), pos))
 }
 
 fn logic_or(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let rhs = parse_precedence(lexer, PREC_OR)?;
-    Ok(Ast::Or(Box::new(lhs), Box::new(rhs)))
+    Ok(Ast::Or(Box::new(lhs), Box::new(rhs), pos))
 }
 
 fn while_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     consume(
         lexer,
         |t| t == &TokenType::LeftPar,
@@ -466,10 +480,11 @@ fn while_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
     )?;
     let stmt = statement(lexer)?;
 
-    Ok(Ast::While(Box::new(expr), Box::new(stmt)))
+    Ok(Ast::While(Box::new(expr), Box::new(stmt), pos))
 }
 
 fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     consume(
         lexer,
         |t| t == &TokenType::LeftPar,
@@ -504,16 +519,18 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
         statement(lexer)?
     } else {
         let ret_expr = expression(lexer)?;
-        Ast::Block(vec![Ast::Return(Some(Box::new(ret_expr)), None)])
+        Ast::Block(vec![Ast::Return(Some(Box::new(ret_expr)), None, pos)], pos)
     };
     Ok(Ast::Function {
         body: Box::new(body),
         args,
         ret_t,
+        position: pos,
     })
 }
 
 fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let mut args = vec![];
     while lexer.current_t() != TokenType::RightPar {
         args.push(expression(lexer)?);
@@ -526,22 +543,29 @@ fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
         |t| t == &TokenType::RightPar,
         "expected ')' after arguments",
     )?;
-    Ok(Ast::Call(Box::new(ident), args, None))
+    Ok(Ast::Call(Box::new(ident), args, None, pos))
 }
 
 fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
     let name = parse_variable(lexer)?;
 
     let function = match function(lexer)? {
-        Ast::Function { body, args, ret_t } => Ast::FuncDeclaration(
+        Ast::Function {
+            body,
+            args,
+            ret_t,
+            position,
+        } => Ast::FuncDeclaration(
             name,
             Box::new(Ast::Function {
                 body,
                 args: args.clone(),
                 ret_t: ret_t.clone(),
+                position,
             }),
             args.into_iter().map(|a| a.1).collect(),
             ret_t,
+            position,
         ),
         _ => panic!(),
     };
@@ -550,6 +574,7 @@ fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
 }
 
 fn return_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
     let expr = if lexer.current_t() != TokenType::Semicolon {
         Some(Box::new(expression(lexer)?))
     } else {
@@ -560,5 +585,5 @@ fn return_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
         |t| t == &TokenType::Semicolon,
         "expected ';' after return statement",
     )?;
-    Ok(Ast::Return(expr, None))
+    Ok(Ast::Return(expr, None, pos))
 }
