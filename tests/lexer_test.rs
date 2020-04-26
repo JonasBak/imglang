@@ -228,7 +228,7 @@ fn literals() {
 #[test]
 fn keywords() {
     let mut tokens = scan(
-        &"and class else false fun for if nil or print return super this true var while"
+        &"and       else false fun for if nil or print return            true var while"
             .to_string(),
     )
     .unwrap()
@@ -238,11 +238,6 @@ fn keywords() {
             start: 0,
             end: 3,
             t: TokenType::And,
-        }),
-        Some(Token {
-            start: 4,
-            end: 9,
-            t: TokenType::Class,
         }),
         Some(Token {
             start: 10,
@@ -288,16 +283,6 @@ fn keywords() {
             start: 45,
             end: 51,
             t: TokenType::Return,
-        }),
-        Some(Token {
-            start: 52,
-            end: 57,
-            t: TokenType::Super,
-        }),
-        Some(Token {
-            start: 58,
-            end: 62,
-            t: TokenType::This,
         }),
         Some(Token {
             start: 63,

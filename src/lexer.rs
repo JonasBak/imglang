@@ -261,7 +261,6 @@ pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
             t.t = match t.t {
                 TokenType::Identifier(val) => match val.as_str() {
                     "and" => TokenType::And,
-                    "class" => TokenType::Class,
                     "else" => TokenType::Else,
                     "false" => TokenType::False,
                     "fun" => TokenType::Fun,
@@ -271,8 +270,6 @@ pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
                     "or" => TokenType::Or,
                     "print" => TokenType::Print,
                     "return" => TokenType::Return,
-                    "super" => TokenType::Super,
-                    "this" => TokenType::This,
                     "true" => TokenType::True,
                     "var" => TokenType::Var,
                     "while" => TokenType::While,

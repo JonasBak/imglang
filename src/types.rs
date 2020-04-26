@@ -104,7 +104,7 @@ impl TypeChecker {
                 }
                 AstType::Nil
             }
-            Ast::Block(ps, pos) => {
+            Ast::Block(ps, _) => {
                 let mut errors = Vec::new();
                 self.current_scope_depth += 1;
                 for p in ps.iter_mut() {
@@ -149,7 +149,7 @@ impl TypeChecker {
                 self.return_values.push(expr_t);
                 AstType::Nil
             }
-            Ast::Declaration(name, expr, t, pos) => {
+            Ast::Declaration(name, expr, t, _) => {
                 let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t.clone());
                 self.declare_variable(name, expr_t);
@@ -238,7 +238,7 @@ impl TypeChecker {
                 self.annotate_type(stmt)?;
                 AstType::Nil
             }
-            Ast::ExprStatement(expr, t, pos) => {
+            Ast::ExprStatement(expr, t, _) => {
                 let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t);
                 AstType::Nil
@@ -260,12 +260,20 @@ impl TypeChecker {
                     self.declare_variable(&arg.0, arg.1.clone());
                 }
 
-                let body_t = self.annotate_type(body)?;
+                self.annotate_type(body)?;
 
                 // TODO check for divergence and potential "leftouts" that default to nil
                 if let Some(t) = self.return_values.iter().filter(|t| *t != ret_t).next() {
                     return Err(TypeError::Error(
                         format!("return type {:?} doesn't match signature {:?}", t, ret_t),
+                        *position,
+                    ));
+                } else if self.return_values.len() == 0 && *ret_t != AstType::Nil {
+                    return Err(TypeError::Error(
+                        format!(
+                            "function with return type {:?} needs explicit return statement",
+                            ret_t
+                        ),
                         *position,
                     ));
                 }
@@ -307,7 +315,19 @@ impl TypeChecker {
             Ast::Float(_, _) => AstType::Float,
             Ast::Bool(_, _) => AstType::Bool,
             Ast::String(_, _) => AstType::String,
-            Ast::Negate(a, _) => self.annotate_type(a)?,
+            Ast::Negate(a, pos) => {
+                let t = self.annotate_type(a)?;
+                if match t {
+                    AstType::Float => false,
+                    _ => true,
+                } {
+                    return Err(TypeError::Error(
+                        format!("operation can't be preformed on type {:?}", t),
+                        *pos,
+                    ));
+                }
+                t
+            }
             Ast::Not(a, pos) => {
                 let t = self.annotate_type(a)?;
                 if t != AstType::Bool {
@@ -333,6 +353,15 @@ impl TypeChecker {
                         *pos,
                     ));
                 }
+                if match t_l {
+                    AstType::Float => false,
+                    _ => true,
+                } {
+                    return Err(TypeError::Error(
+                        format!("operation can't be preformed on type {:?}", t_l),
+                        *pos,
+                    ));
+                }
                 t.replace(t_r.clone());
                 t_r
             }
@@ -350,6 +379,15 @@ impl TypeChecker {
                             "type of left operand ({:?}) doesn't match type of right ({:?})",
                             t_l, t_r
                         ),
+                        *pos,
+                    ));
+                }
+                if match t_l {
+                    AstType::Float => false,
+                    _ => true,
+                } {
+                    return Err(TypeError::Error(
+                        format!("operation can't be preformed on type {:?}", t_l),
                         *pos,
                     ));
                 }
