@@ -24,7 +24,11 @@ fn print_errors(source: &String, errors: Vec<(usize, String)>) {
         .collect();
     eprintln!("{} errors!\n", errors.len());
     for (msg, line) in errors.iter() {
-        eprintln!("...\n{: >3} | {}\n...", line + 1, lines[*line]);
+        eprintln!(
+            "...\n{: >3} | {}\n...",
+            line + 1,
+            lines[(*line).min(lines.len() - 1)]
+        );
         eprintln!("> {}", msg);
     }
 }
