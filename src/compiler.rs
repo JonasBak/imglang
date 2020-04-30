@@ -79,7 +79,7 @@ impl Compiler {
             AstType::Float => {
                 self.chunk().push_op(OpCode::PopU64 as u8);
             }
-            AstType::String => {
+            AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => {
                 self.chunk().push_op(OpCode::DecreaseRC as u8);
                 self.chunk().push_op(OpCode::PopU32 as u8);
             }
@@ -138,7 +138,9 @@ impl Compiler {
                     AstType::Bool => {
                         self.chunk().push_op(OpCode::PrintBool as u8);
                     }
-                    AstType::Function(..) => todo!(),
+                    AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::Function(..) => {
+                        todo!()
+                    }
                     AstType::Nil => todo!(),
                     AstType::String => {
                         self.chunk().push_op(OpCode::PrintString as u8);
@@ -166,17 +168,31 @@ impl Compiler {
                     .expect("TODO could not resolve variable");
                 match v {
                     Variable::Local(v) => {
-                        match t.as_ref().unwrap() {
-                            AstType::Bool => self.chunk().push_op(OpCode::VariableU8 as u8),
-                            AstType::Function { .. } => {
-                                self.chunk().push_op(OpCode::VariableU16 as u8)
+                        let is_rc = match t.as_ref().unwrap() {
+                            AstType::Bool => {
+                                self.chunk().push_op(OpCode::VariableU8 as u8);
+                                false
                             }
-                            AstType::Float => self.chunk().push_op(OpCode::VariableU64 as u8),
-                            AstType::String => self.chunk().push_op(OpCode::VariableU32 as u8),
+                            AstType::Function { .. } => {
+                                self.chunk().push_op(OpCode::VariableU16 as u8);
+                                false
+                            }
+                            AstType::Float => {
+                                self.chunk().push_op(OpCode::VariableU64 as u8);
+                                false
+                            }
+                            AstType::HeapAllocated(_) => {
+                                self.chunk().push_op(OpCode::HeapFloat as u8);
+                                false
+                            }
+                            AstType::Closure(..) | AstType::String => {
+                                self.chunk().push_op(OpCode::VariableU32 as u8);
+                                true
+                            }
                             AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
-                        if t.as_ref().unwrap().is_obj() {
+                        if is_rc {
                             self.chunk().push_op(OpCode::IncreaseRC as u8);
                         }
                     }
@@ -186,7 +202,7 @@ impl Compiler {
                     }
                 }
             }
-            Ast::Assign(name, expr, t, _) => {
+            Ast::Assign(name, expr, t, move_to_heap, _) => {
                 self.codegen(expr);
                 let v = self
                     .resolve_variable(name)
@@ -197,7 +213,21 @@ impl Compiler {
                             AstType::Bool => self.chunk().push_op(OpCode::AssignU8 as u8),
                             AstType::Function(..) => self.chunk().push_op(OpCode::AssignU16 as u8),
                             AstType::Float => self.chunk().push_op(OpCode::AssignU64 as u8),
-                            AstType::String => self.chunk().push_op(OpCode::AssignObj as u8),
+                            AstType::HeapAllocated(inner_t) => {
+                                if move_to_heap.unwrap() {
+                                    match **inner_t {
+                                        AstType::Float => {
+                                            self.chunk().push_op(OpCode::AssignHeapFloat as u8)
+                                        }
+                                        _ => todo!(),
+                                    }
+                                } else {
+                                    self.chunk().push_op(OpCode::AssignObj as u8)
+                                }
+                            }
+                            AstType::Closure(..) | AstType::String => {
+                                self.chunk().push_op(OpCode::AssignObj as u8)
+                            }
                             AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
@@ -248,20 +278,28 @@ impl Compiler {
                 self.pop_type(t.as_ref().unwrap());
             }
             Ast::Function {
-                body, args, ret_t, ..
+                body,
+                args,
+                ret_t,
+                captured,
+                position,
             } => {
                 let prev_chunk = self.current_chunk;
                 self.chunks.push(Chunk::new());
                 self.current_chunk = self.chunks.len() as ChunkAdr - 1;
 
                 let old_variables = mem::replace(&mut self.variables, vec![]);
-                let old_depth = self.current_scope_depth;
-                let old_is_root = self.is_root;
-                self.current_scope_depth = 0;
-                self.is_root = false;
+                let old_depth = mem::replace(&mut self.current_scope_depth, 0);
+                let old_is_root = mem::replace(&mut self.is_root, false);
 
                 for arg in args.iter() {
                     self.declare_variable(&arg.0, arg.1.clone());
+                }
+                for var in captured.iter() {
+                    self.declare_variable(
+                        &var.0,
+                        AstType::HeapAllocated(Box::new(var.1.clone().unwrap())),
+                    );
                 }
 
                 self.codegen(body);
@@ -270,17 +308,32 @@ impl Compiler {
                 }
 
                 mem::replace(&mut self.variables, old_variables);
-                self.current_scope_depth = old_depth;
-                self.is_root = old_is_root;
+                mem::replace(&mut self.current_scope_depth, old_depth);
+                mem::replace(&mut self.is_root, old_is_root);
 
-                let c = self.current_chunk;
+                let c = mem::replace(&mut self.current_chunk, prev_chunk);
 
-                self.current_chunk = prev_chunk;
-
-                self.chunk().push_op(OpCode::Function as u8);
-                self.chunk().push_op_u16(c);
+                if captured.len() == 0 {
+                    self.chunk().push_op(OpCode::Function as u8);
+                    self.chunk().push_op_u16(c);
+                } else {
+                    for var in captured.iter() {
+                        self.codegen(&Ast::Variable(
+                            var.0.clone(),
+                            Some(var.1.clone().unwrap()),
+                            *position,
+                        ));
+                        match var.1.as_ref().unwrap() {
+                            AstType::Float => self.chunk().push_op(OpCode::HeapifyFloat as u8),
+                            _ => todo!(),
+                        };
+                    }
+                    self.chunk().push_op(OpCode::Closure as u8);
+                    self.chunk().push_op_u16(c);
+                    self.chunk().push_op(captured.len() as u8);
+                }
             }
-            Ast::Call(ident, args, args_width, _) => {
+            Ast::Call(ident, args, args_width, is_closure, _) => {
                 for arg in args.iter() {
                     self.codegen(arg);
                 }
@@ -289,7 +342,11 @@ impl Compiler {
 
                 let args_width = args_width.unwrap();
 
-                self.chunk().push_op(OpCode::Call as u8);
+                if is_closure.unwrap() {
+                    self.chunk().push_op(OpCode::CallClosure as u8);
+                } else {
+                    self.chunk().push_op(OpCode::Call as u8);
+                }
                 self.chunk().push_op(args_width);
             }
             Ast::Float(n, _) => {

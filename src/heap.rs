@@ -1,9 +1,18 @@
 use super::*;
+use std::mem;
 
 pub type HeapAdr = u32;
 
+pub struct Closure {
+    pub function: ChunkAdr,
+    pub captured: Vec<HeapAdr>,
+}
+
 pub enum Obj {
     String(String),
+    Float(f64),
+
+    Closure(Closure),
 
     Free,
 }
@@ -16,8 +25,8 @@ pub struct Heap {
 impl Heap {
     pub fn new() -> Heap {
         Heap {
-            objects: Vec::new(),
-            gaps: Vec::new(),
+            objects: Vec::with_capacity(64),
+            gaps: Vec::with_capacity(64),
         }
     }
 
@@ -47,6 +56,10 @@ impl Heap {
         }
     }
 
+    pub fn set_object(&mut self, i: HeapAdr, obj: Obj) {
+        self.objects[i as usize].1 = obj;
+    }
+
     pub fn increase_rc(&mut self, i: HeapAdr) {
         let mut entry = &mut self.objects[i as usize];
         entry.0 += 1;
@@ -66,7 +79,15 @@ impl Heap {
             #[cfg(feature = "debug_heap")]
             println!("freed {}", i);
 
-            self.objects[i as usize] = (0, Obj::Free);
+            match mem::replace(&mut self.objects[i as usize], (0, Obj::Free)) {
+                (_, Obj::Closure(c)) => {
+                    for var in c.captured.iter() {
+                        self.decrease_rc(*var);
+                    }
+                }
+                _ => {}
+            }
+
             self.gaps.push(i);
         }
     }
@@ -78,6 +99,20 @@ impl Heap {
     pub fn get_string_ref(&self, i: HeapAdr) -> Option<&String> {
         self.get_object_ref(i).map(|obj| match obj {
             Obj::String(s) => s,
+            _ => todo!(),
+        })
+    }
+
+    pub fn get_closure_ref(&self, i: HeapAdr) -> Option<&Closure> {
+        self.get_object_ref(i).map(|obj| match obj {
+            Obj::Closure(c) => c,
+            _ => todo!(),
+        })
+    }
+
+    pub fn get_float(&self, i: HeapAdr) -> Option<f64> {
+        self.get_object_ref(i).map(|obj| match obj {
+            Obj::Float(f) => *f,
             _ => todo!(),
         })
     }

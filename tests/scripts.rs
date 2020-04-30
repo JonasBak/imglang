@@ -55,3 +55,8 @@ fn fibonacci() {
 fn nested_scopes() {
     test_script("tests/scripts/nested_scopes");
 }
+
+#[test]
+fn closure_counter() {
+    test_script("tests/scripts/counter");
+}

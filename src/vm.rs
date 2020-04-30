@@ -237,6 +237,14 @@ impl VM {
                     self.heap.decrease_rc(old_val);
                     self.stack.set_u32(new_val, (i + frame_offset) as Adr);
                 }
+                OpCode::AssignHeapFloat => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let adr = self.stack.get_u32((i + frame_offset) as Adr);
+                    let top = self.len_stack() - 8;
+                    let v = self.stack.get_f64(top as Adr);
+                    self.heap.set_object(adr, Obj::Float(v));
+                }
                 OpCode::JumpIfFalse => {
                     let offset = chunk.get_op_u16(ip);
                     ip += 2;
@@ -250,9 +258,9 @@ impl VM {
                     ip = chunk.get_op_u16(ip);
                 }
                 OpCode::Function => {
-                    let chunk = chunk.get_op_u16(ip);
+                    let chunk_i = chunk.get_op_u16(ip);
                     ip += 2;
-                    self.stack.push_u16(chunk);
+                    self.stack.push_u16(chunk_i);
                 }
                 OpCode::Call => {
                     let args_width = chunk.get_op(ip) as StackAdr;
@@ -269,6 +277,34 @@ impl VM {
                     ip = 0;
                     frame_offset = self.len_stack() - args_width;
                 }
+                OpCode::CallClosure => {
+                    let mut args_width = chunk.get_op(ip) as StackAdr;
+                    ip += 1;
+                    let closure_adr = self.stack.pop_u32();
+
+                    let closure = self.heap.get_closure_ref(closure_adr).unwrap();
+                    args_width += closure.captured.len() as StackAdr * 4;
+
+                    for var in closure.captured.iter() {
+                        self.stack.push_u32(*var);
+                    }
+
+                    self.call_frames.push(CallFrame {
+                        parent_ip: ip,
+                        parent_chunk: current_chunk,
+                        parent_frame_offset: frame_offset,
+                        args_width,
+                    });
+                    current_chunk = closure.function;
+                    ip = 0;
+                    frame_offset = self.len_stack() - args_width;
+
+                    let captured = closure.captured.clone();
+                    self.heap.decrease_rc(closure_adr);
+                    for var in captured.iter() {
+                        self.heap.increase_rc(*var);
+                    }
+                }
                 OpCode::IncreaseRC => {
                     let top = self.len_stack() - 4;
                     let v = self.stack.get_u32(top as Adr);
@@ -278,6 +314,34 @@ impl VM {
                     let top = self.len_stack() - 4;
                     let v = self.stack.get_u32(top as Adr);
                     self.heap.decrease_rc(v);
+                }
+                OpCode::HeapifyFloat => {
+                    let n = self.stack.pop_f64();
+                    let adr = self.heap.add_object(Obj::Float(n));
+                    self.stack.push_u32(adr);
+                }
+                OpCode::Closure => {
+                    let function = chunk.get_op_u16(ip);
+                    let n_vars = chunk.get_op(ip + 2);
+                    ip += 3;
+
+                    let mut captured = Vec::new();
+                    for _ in 0..n_vars {
+                        captured.push(self.stack.pop_u32());
+                    }
+                    captured = captured.into_iter().rev().collect();
+
+                    let adr = self
+                        .heap
+                        .add_object(Obj::Closure(Closure { function, captured }));
+                    self.stack.push_u32(adr);
+                }
+                OpCode::HeapFloat => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let adr = self.stack.get_u32((i + frame_offset) as Adr);
+                    let v = self.heap.get_float(adr);
+                    self.stack.push_f64(v.unwrap());
                 }
             }
         }

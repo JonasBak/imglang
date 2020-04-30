@@ -1,0 +1,20 @@
+fun getCounter(start float, end float) <;float>* {
+  return fun[start, end]() float {
+    var current = start;
+    if (start < end) {
+      start = start + 1;
+    }
+    return current;
+  };
+}
+
+{
+  var counter = getCounter(10, 13);
+
+  print counter();
+  print counter();
+  print counter();
+  print counter();
+  print counter();
+  print counter();
+}

@@ -6,7 +6,7 @@ pub struct ByteVector(pub Vec<u8>);
 
 impl ByteVector {
     pub fn new() -> ByteVector {
-        ByteVector(Vec::new())
+        ByteVector(Vec::with_capacity(512))
     }
 
     pub fn len(&self) -> Adr {

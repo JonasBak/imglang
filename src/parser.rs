@@ -10,7 +10,7 @@ pub enum Ast {
     Declaration(String, Box<Ast>, Option<AstType>, usize),
     FuncDeclaration(String, Box<Ast>, Vec<AstType>, AstType, usize),
     Variable(String, Option<AstType>, usize),
-    Assign(String, Box<Ast>, Option<AstType>, usize),
+    Assign(String, Box<Ast>, Option<AstType>, Option<bool>, usize),
 
     If(Box<Ast>, Box<Ast>, Option<Box<Ast>>, usize),
     While(Box<Ast>, Box<Ast>, usize),
@@ -20,10 +20,11 @@ pub enum Ast {
     Function {
         body: Box<Ast>,
         args: Vec<(String, AstType)>,
+        captured: Vec<(String, Option<AstType>)>,
         ret_t: AstType,
         position: usize,
     },
-    Call(Box<Ast>, Vec<Ast>, Option<u8>, usize),
+    Call(Box<Ast>, Vec<Ast>, Option<u8>, Option<bool>, usize),
 
     Float(f64, usize),
     Bool(bool, usize),
@@ -125,7 +126,12 @@ fn parse_type(lexer: &mut Lexer) -> ParserResult<Option<AstType>> {
                 |t| t == &TokenType::Greater,
                 "expected '>' after argument types",
             )?;
-            AstType::Function(args, Box::new(ret_t))
+            if lexer.current_t() == TokenType::Star {
+                lexer.next();
+                AstType::Closure(args, Box::new(ret_t))
+            } else {
+                AstType::Function(args, Box::new(ret_t))
+            }
         }
         _ => return Ok(None),
     };
@@ -352,7 +358,7 @@ fn named_variable(lexer: &mut Lexer) -> ParserResult<Ast> {
         TokenType::Equal => {
             lexer.next();
             let expr = expression(lexer)?;
-            Ok(Ast::Assign(name, Box::new(expr), None, pos))
+            Ok(Ast::Assign(name, Box::new(expr), None, None, pos))
         }
         _ => Ok(Ast::Variable(name, None, pos)),
     }
@@ -485,6 +491,29 @@ fn while_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
 
 fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
     let pos = lexer.prev().unwrap().start;
+    let mut captured = Vec::new();
+    if lexer.current_t() == TokenType::LeftSquare {
+        lexer.next();
+        while lexer.current_t() != TokenType::RightSquare {
+            let var = match lexer.current_t() {
+                TokenType::Identifier(var) => var,
+                _ => todo!(),
+            };
+            captured.push((var, None));
+
+            lexer.next();
+
+            if lexer.current_t() != TokenType::Comma {
+                break;
+            }
+            lexer.next();
+        }
+        consume(
+            lexer,
+            |t| t == &TokenType::RightSquare,
+            "expected ']' after captured variables",
+        )?;
+    }
     consume(
         lexer,
         |t| t == &TokenType::LeftPar,
@@ -524,6 +553,7 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
     Ok(Ast::Function {
         body: Box::new(body),
         args,
+        captured,
         ret_t,
         position: pos,
     })
@@ -543,7 +573,7 @@ fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
         |t| t == &TokenType::RightPar,
         "expected ')' after arguments",
     )?;
-    Ok(Ast::Call(Box::new(ident), args, None, pos))
+    Ok(Ast::Call(Box::new(ident), args, None, None, pos))
 }
 
 fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
@@ -553,20 +583,31 @@ fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
         Ast::Function {
             body,
             args,
+            captured,
             ret_t,
             position,
-        } => Ast::FuncDeclaration(
-            name,
-            Box::new(Ast::Function {
-                body,
-                args: args.clone(),
-                ret_t: ret_t.clone(),
+        } => {
+            if captured.len() > 0 {
+                return Err(ParserError::Unexpected(
+                    lexer.prev().unwrap(),
+                    "function declarations can't be closures",
+                ));
+            }
+
+            Ast::FuncDeclaration(
+                name,
+                Box::new(Ast::Function {
+                    body,
+                    args: args.clone(),
+                    captured,
+                    ret_t: ret_t.clone(),
+                    position,
+                }),
+                args.into_iter().map(|a| a.1).collect(),
+                ret_t,
                 position,
-            }),
-            args.into_iter().map(|a| a.1).collect(),
-            ret_t,
-            position,
-        ),
+            )
+        }
         _ => panic!(),
     };
 

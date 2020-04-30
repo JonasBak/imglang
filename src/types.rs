@@ -5,12 +5,15 @@ use std::mem;
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstType {
     Function(Vec<AstType>, Box<AstType>),
+    Closure(Vec<AstType>, Box<AstType>),
 
     Float,
     Bool,
     Nil,
 
     String,
+
+    HeapAllocated(Box<AstType>),
 }
 impl AstType {
     pub fn size(&self) -> StackAdr {
@@ -18,14 +21,16 @@ impl AstType {
             AstType::Bool => 1,
             AstType::Float => 8,
             AstType::Function(..) => mem::size_of::<ChunkAdr>(),
-            AstType::String => mem::size_of::<HeapAdr>(),
+            AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => {
+                mem::size_of::<HeapAdr>()
+            }
             AstType::Nil => 0,
         };
         n as StackAdr
     }
     pub fn is_obj(&self) -> bool {
         match self {
-            AstType::String => true,
+            AstType::HeapAllocated(_) | AstType::Closure(_, _) | AstType::String => true,
             _ => false,
         }
     }
@@ -179,7 +184,11 @@ impl TypeChecker {
                 match v {
                     Variable::Local(local) => {
                         t.replace(local.t.clone());
-                        local.t.clone()
+                        if let AstType::HeapAllocated(t) = local.t {
+                            *t.clone()
+                        } else {
+                            local.t.clone()
+                        }
                     }
                     Variable::Global(global) => {
                         t.replace(global.clone());
@@ -187,7 +196,7 @@ impl TypeChecker {
                     }
                 }
             }
-            Ast::Assign(name, expr, t, pos) => {
+            Ast::Assign(name, expr, t, move_to_heap, pos) => {
                 let v_t = match self.resolve_variable(name).ok_or(TypeError::Error(
                     format!("variable {} is not defined", name),
                     *pos,
@@ -201,17 +210,25 @@ impl TypeChecker {
                     }
                 };
                 let expr_t = self.annotate_type(expr)?;
-                if v_t != expr_t {
-                    return Err(TypeError::Error(
-                        format!(
-                            "cannot assign value of type {:?} to variable with type {:?}",
-                            expr_t, v_t
-                        ),
-                        *pos,
-                    ));
+                match (&v_t, &expr_t) {
+                    (a, b) if a == b => {
+                        move_to_heap.replace(false);
+                    }
+                    (AstType::HeapAllocated(a), b) if **a == *b => {
+                        move_to_heap.replace(true);
+                    }
+                    _ => {
+                        return Err(TypeError::Error(
+                            format!(
+                                "cannot assign value of type {:?} to variable with type {:?}",
+                                expr_t, v_t
+                            ),
+                            *pos,
+                        ));
+                    }
                 }
-                t.replace(expr_t);
-                v_t
+                t.replace(v_t);
+                expr_t
             }
             Ast::If(expr, stmt, else_stmt, pos) => {
                 let expr_t = self.annotate_type(expr)?;
@@ -246,29 +263,56 @@ impl TypeChecker {
             Ast::Function {
                 body,
                 args,
+                captured,
                 ret_t,
                 position,
             } => {
+                captured
+                    .iter_mut()
+                    .map(|(name, var_t)| match self.resolve_variable(name) {
+                        Some(Variable::Local(LocalVariable { t, .. }))
+                        | Some(Variable::Global(t)) => {
+                            var_t.replace(t);
+                            Ok(())
+                        }
+                        None => Err(TypeError::Error(
+                            format!("variable {} is not defined", name),
+                            *position,
+                        )),
+                    })
+                    .collect::<Result<Vec<_>, TypeError>>()?;
+
                 let old_variables = mem::replace(&mut self.variables, vec![]);
                 let old_return_values = mem::replace(&mut self.return_values, vec![]);
-                let old_depth = self.current_scope_depth;
-                let old_is_root = self.is_root;
-                self.current_scope_depth = 0;
-                self.is_root = false;
+                let old_depth = mem::replace(&mut self.current_scope_depth, 0);
+                let old_is_root = mem::replace(&mut self.is_root, false);
 
                 for arg in args.iter() {
                     self.declare_variable(&arg.0, arg.1.clone());
                 }
+                for var in captured.iter() {
+                    self.declare_variable(
+                        &var.0,
+                        AstType::HeapAllocated(Box::new(var.1.clone().unwrap())),
+                    );
+                }
 
-                self.annotate_type(body)?;
+                let result = self.annotate_type(body);
+
+                mem::replace(&mut self.variables, old_variables);
+                let return_values = mem::replace(&mut self.return_values, old_return_values);
+                mem::replace(&mut self.current_scope_depth, old_depth);
+                mem::replace(&mut self.is_root, old_is_root);
+
+                result?;
 
                 // TODO check for divergence and potential "leftouts" that default to nil
-                if let Some(t) = self.return_values.iter().filter(|t| *t != ret_t).next() {
+                if let Some(t) = return_values.iter().filter(|t| *t != ret_t).next() {
                     return Err(TypeError::Error(
                         format!("return type {:?} doesn't match signature {:?}", t, ret_t),
                         *position,
                     ));
-                } else if self.return_values.len() == 0 && *ret_t != AstType::Nil {
+                } else if return_values.len() == 0 && *ret_t != AstType::Nil {
                     return Err(TypeError::Error(
                         format!(
                             "function with return type {:?} needs explicit return statement",
@@ -278,24 +322,33 @@ impl TypeChecker {
                     ));
                 }
 
-                mem::replace(&mut self.variables, old_variables);
-                mem::replace(&mut self.return_values, old_return_values);
-                self.current_scope_depth = old_depth;
-                self.is_root = old_is_root;
-
-                AstType::Function(
-                    args.iter().map(|t| t.1.clone()).collect(),
-                    Box::new(ret_t.clone()),
-                )
+                if captured.len() == 0 {
+                    AstType::Function(
+                        args.iter().map(|t| t.1.clone()).collect(),
+                        Box::new(ret_t.clone()),
+                    )
+                } else {
+                    AstType::Closure(
+                        args.iter().map(|t| t.1.clone()).collect(),
+                        Box::new(ret_t.clone()),
+                    )
+                }
             }
-            Ast::Call(ident, args, args_width, pos) => {
+            Ast::Call(ident, args, args_width, is_closure, pos) => {
                 let ident_t = self.annotate_type(ident)?;
                 let mut args_t = vec![];
                 for arg in args.iter_mut() {
                     args_t.push(self.annotate_type(arg)?);
                 }
                 let (func_args_t, ret_t) = match ident_t {
-                    AstType::Function(a, r) => (a, r),
+                    AstType::Closure(a, r) => {
+                        is_closure.replace(true);
+                        (a, r)
+                    }
+                    AstType::Function(a, r) => {
+                        is_closure.replace(false);
+                        (a, r)
+                    }
                     t @ _ => {
                         return Err(TypeError::Error(format!("cannot call type {:?}", t), *pos))
                     }

@@ -142,12 +142,21 @@ pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
         op @ OpCode::AssignU32 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::AssignU64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::AssignObj => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        op @ OpCode::AssignHeapFloat => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::JumpIfFalse => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::Jump => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::Function => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::Call => print_unary_u8(op, chunk.get_op(ip + 1)),
+        op @ OpCode::CallClosure => print_unary_u8(op, chunk.get_op(ip + 1)),
         op @ OpCode::PushU16 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::IncreaseRC => print_simple(op),
         op @ OpCode::DecreaseRC => print_simple(op),
+        op @ OpCode::HeapifyFloat => print_simple(op),
+        op @ OpCode::Closure => {
+            print_simple(op);
+            // TODO
+            4
+        }
+        op @ OpCode::HeapFloat => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
     }
 }
