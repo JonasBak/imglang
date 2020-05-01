@@ -109,10 +109,10 @@ impl TypeChecker {
                 }
                 AstType::Nil
             }
-            Ast::Block(ps, _) => {
+            Ast::Block { cont, .. } => {
                 let mut errors = Vec::new();
                 self.current_scope_depth += 1;
-                for p in ps.iter_mut() {
+                for p in cont.iter_mut() {
                     match self.annotate_type(p) {
                         Ok(_) => {}
                         Err(error) => errors.push(error),
@@ -128,7 +128,7 @@ impl TypeChecker {
                 }
                 AstType::Nil
             }
-            Ast::Print(expr, t, pos) => {
+            Ast::Print { expr, t, pos } => {
                 let expr_t = match self.annotate_type(expr)? {
                     t @ AstType::Bool | t @ AstType::Float | t @ AstType::String => t,
                     t @ _ => {
@@ -138,7 +138,7 @@ impl TypeChecker {
                 t.replace(expr_t);
                 AstType::Nil
             }
-            Ast::Return(expr, t, pos) => {
+            Ast::Return { expr, t, pos } => {
                 if self.is_root {
                     return Err(TypeError::Error(
                         "can't return from root function".to_string(),
@@ -154,17 +154,23 @@ impl TypeChecker {
                 self.return_values.push(expr_t);
                 AstType::Nil
             }
-            Ast::Declaration(name, expr, t, _) => {
+            Ast::Declaration { name, expr, t, .. } => {
                 let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t.clone());
                 self.declare_variable(name, expr_t);
                 AstType::Nil
             }
-            Ast::FuncDeclaration(name, func, args_t, t, pos) => {
+            Ast::FuncDeclaration {
+                name,
+                func,
+                args_t,
+                ret_t,
+                pos,
+            } => {
                 if self.is_root && self.current_scope_depth == 0 {
                     self.globals.insert(
                         name.clone(),
-                        AstType::Function(args_t.clone(), Box::new(t.clone())),
+                        AstType::Function(args_t.clone(), Box::new(ret_t.clone())),
                     );
                 } else {
                     return Err(TypeError::Error(
@@ -176,7 +182,7 @@ impl TypeChecker {
                 self.annotate_type(func)?;
                 AstType::Nil
             }
-            Ast::Variable(name, t, pos) => {
+            Ast::Variable { name, t, pos } => {
                 let v = self.resolve_variable(name).ok_or(TypeError::Error(
                     format!("variable {} is not defined", name),
                     *pos,
@@ -196,7 +202,13 @@ impl TypeChecker {
                     }
                 }
             }
-            Ast::Assign(name, expr, t, move_to_heap, pos) => {
+            Ast::Assign {
+                name,
+                expr,
+                t,
+                move_to_heap,
+                pos,
+            } => {
                 let v_t = match self.resolve_variable(name).ok_or(TypeError::Error(
                     format!("variable {} is not defined", name),
                     *pos,
@@ -230,32 +242,41 @@ impl TypeChecker {
                 t.replace(v_t);
                 expr_t
             }
-            Ast::If(expr, stmt, else_stmt, pos) => {
-                let expr_t = self.annotate_type(expr)?;
-                if expr_t != AstType::Bool {
+            Ast::If {
+                condition,
+                body,
+                else_body,
+                pos,
+            } => {
+                let condition_t = self.annotate_type(condition)?;
+                if condition_t != AstType::Bool {
                     return Err(TypeError::Error(
                         "condition must be a bool".to_string(),
                         *pos,
                     ));
                 }
-                self.annotate_type(stmt)?;
-                if let Some(else_stmt) = else_stmt {
-                    self.annotate_type(else_stmt)?;
+                self.annotate_type(body)?;
+                if let Some(else_body) = else_body {
+                    self.annotate_type(else_body)?;
                 }
                 AstType::Nil
             }
-            Ast::While(expr, stmt, pos) => {
-                let expr_t = self.annotate_type(expr)?;
-                if expr_t != AstType::Bool {
+            Ast::While {
+                condition,
+                body,
+                pos,
+            } => {
+                let condition_t = self.annotate_type(condition)?;
+                if condition_t != AstType::Bool {
                     return Err(TypeError::Error(
                         "condition must be a bool".to_string(),
                         *pos,
                     ));
                 }
-                self.annotate_type(stmt)?;
+                self.annotate_type(body)?;
                 AstType::Nil
             }
-            Ast::ExprStatement(expr, t, _) => {
+            Ast::ExprStatement { expr, t, .. } => {
                 let expr_t = self.annotate_type(expr)?;
                 t.replace(expr_t);
                 AstType::Nil
@@ -265,7 +286,7 @@ impl TypeChecker {
                 args,
                 captured,
                 ret_t,
-                position,
+                pos,
             } => {
                 captured
                     .iter_mut()
@@ -277,7 +298,7 @@ impl TypeChecker {
                         }
                         None => Err(TypeError::Error(
                             format!("variable {} is not defined", name),
-                            *position,
+                            *pos,
                         )),
                     })
                     .collect::<Result<Vec<_>, TypeError>>()?;
@@ -310,7 +331,7 @@ impl TypeChecker {
                 if let Some(t) = return_values.iter().filter(|t| *t != ret_t).next() {
                     return Err(TypeError::Error(
                         format!("return type {:?} doesn't match signature {:?}", t, ret_t),
-                        *position,
+                        *pos,
                     ));
                 } else if return_values.len() == 0 && *ret_t != AstType::Nil {
                     return Err(TypeError::Error(
@@ -318,7 +339,7 @@ impl TypeChecker {
                             "function with return type {:?} needs explicit return statement",
                             ret_t
                         ),
-                        *position,
+                        *pos,
                     ));
                 }
 
@@ -334,7 +355,13 @@ impl TypeChecker {
                     )
                 }
             }
-            Ast::Call(ident, args, args_width, is_closure, pos) => {
+            Ast::Call {
+                ident,
+                args,
+                args_width,
+                is_closure,
+                pos,
+            } => {
                 let ident_t = self.annotate_type(ident)?;
                 let mut args_t = vec![];
                 for arg in args.iter_mut() {

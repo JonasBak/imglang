@@ -111,52 +111,52 @@ fn print_unary_u16(op: OpCode, operand: u16) -> CodeAdr {
 
 pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
     match OpCode::from(chunk.get_op(ip)) {
-        op @ OpCode::Return => print_unary_u8(op, chunk.get_op(ip + 1)),
-        op @ OpCode::ConstantF64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::ConstantString => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::NegateF64 => print_simple(op),
-        op @ OpCode::MultiplyF64 => print_simple(op),
-        op @ OpCode::DivideF64 => print_simple(op),
-        op @ OpCode::AddF64 => print_simple(op),
-        op @ OpCode::SubF64 => print_simple(op),
-        op @ OpCode::True => print_simple(op),
-        op @ OpCode::False => print_simple(op),
-        op @ OpCode::PopU8 => print_simple(op),
-        op @ OpCode::PopU16 => print_simple(op),
-        op @ OpCode::PopU32 => print_simple(op),
-        op @ OpCode::PopU64 => print_simple(op),
-        op @ OpCode::Not => print_simple(op),
-        op @ OpCode::EqualU8 => print_simple(op),
-        op @ OpCode::EqualU64 => print_simple(op),
-        op @ OpCode::GreaterF64 => print_simple(op),
-        op @ OpCode::LesserF64 => print_simple(op),
-        op @ OpCode::PrintF64 => print_simple(op),
-        op @ OpCode::PrintBool => print_simple(op),
-        op @ OpCode::PrintString => print_simple(op),
-        op @ OpCode::VariableU8 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::VariableU16 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::VariableU32 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::VariableU64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::AssignU8 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::AssignU16 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::AssignU32 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::AssignU64 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::AssignObj => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::AssignHeapFloat => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::JumpIfFalse => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::Jump => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::Function => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::Call => print_unary_u8(op, chunk.get_op(ip + 1)),
-        op @ OpCode::CallClosure => print_unary_u8(op, chunk.get_op(ip + 1)),
-        op @ OpCode::PushU16 => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::IncreaseRC => print_simple(op),
-        op @ OpCode::DecreaseRC => print_simple(op),
-        op @ OpCode::HeapifyFloat => print_simple(op),
+        op @ OpCode::NegateF64
+        | op @ OpCode::MultiplyF64
+        | op @ OpCode::DivideF64
+        | op @ OpCode::AddF64
+        | op @ OpCode::SubF64
+        | op @ OpCode::True
+        | op @ OpCode::False
+        | op @ OpCode::PopU8
+        | op @ OpCode::PopU16
+        | op @ OpCode::PopU32
+        | op @ OpCode::PopU64
+        | op @ OpCode::Not
+        | op @ OpCode::EqualU8
+        | op @ OpCode::EqualU64
+        | op @ OpCode::GreaterF64
+        | op @ OpCode::LesserF64
+        | op @ OpCode::PrintF64
+        | op @ OpCode::PrintBool
+        | op @ OpCode::PrintString
+        | op @ OpCode::IncreaseRC
+        | op @ OpCode::DecreaseRC
+        | op @ OpCode::HeapifyFloat => print_simple(op),
+        op @ OpCode::Return | op @ OpCode::Call | op @ OpCode::CallClosure => {
+            print_unary_u8(op, chunk.get_op(ip + 1))
+        }
+        op @ OpCode::ConstantF64
+        | op @ OpCode::ConstantString
+        | op @ OpCode::VariableU8
+        | op @ OpCode::VariableU16
+        | op @ OpCode::VariableU32
+        | op @ OpCode::VariableU64
+        | op @ OpCode::AssignU8
+        | op @ OpCode::AssignU16
+        | op @ OpCode::AssignU32
+        | op @ OpCode::AssignU64
+        | op @ OpCode::AssignObj
+        | op @ OpCode::AssignHeapFloat
+        | op @ OpCode::JumpIfFalse
+        | op @ OpCode::Jump
+        | op @ OpCode::Function
+        | op @ OpCode::PushU16
+        | op @ OpCode::HeapFloat => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::Closure => {
             print_simple(op);
             // TODO
             4
         }
-        op @ OpCode::HeapFloat => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
     }
 }

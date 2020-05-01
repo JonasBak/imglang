@@ -121,15 +121,15 @@ impl Compiler {
                 self.chunk().push_op(OpCode::Return as u8);
                 self.chunk().push_op(0);
             }
-            Ast::Block(ps, _) => {
+            Ast::Block { cont, .. } => {
                 self.current_scope_depth += 1;
-                for p in ps.iter() {
+                for p in cont.iter() {
                     self.codegen(p);
                 }
                 self.current_scope_depth -= 1;
                 self.pop_variables();
             }
-            Ast::Print(expr, t, _) => {
+            Ast::Print { expr, t, .. } => {
                 self.codegen(expr);
                 match t.as_ref().unwrap() {
                     AstType::Float => {
@@ -147,14 +147,14 @@ impl Compiler {
                     }
                 };
             }
-            Ast::Return(expr, t, _) => {
+            Ast::Return { expr, t, .. } => {
                 self.push_return(expr, t.as_ref().unwrap());
             }
-            Ast::Declaration(name, expr, t, _) => {
+            Ast::Declaration { name, expr, t, .. } => {
                 self.codegen(expr);
                 self.declare_variable(name, t.clone().unwrap());
             }
-            Ast::FuncDeclaration(name, func, _, _, _) => {
+            Ast::FuncDeclaration { name, func, .. } => {
                 self.globals.insert(
                     name.clone(),
                     GlobalVariable::Function(self.chunks.len() as ChunkAdr),
@@ -162,10 +162,8 @@ impl Compiler {
                 self.codegen(func);
                 self.chunk().push_op(OpCode::PopU16 as u8);
             }
-            Ast::Variable(name, t, _) => {
-                let v = self
-                    .resolve_variable(name)
-                    .expect("TODO could not resolve variable");
+            Ast::Variable { name, t, .. } => {
+                let v = self.resolve_variable(name).unwrap();
                 match v {
                     Variable::Local(v) => {
                         let is_rc = match t.as_ref().unwrap() {
@@ -202,11 +200,15 @@ impl Compiler {
                     }
                 }
             }
-            Ast::Assign(name, expr, t, move_to_heap, _) => {
+            Ast::Assign {
+                name,
+                expr,
+                t,
+                move_to_heap,
+                ..
+            } => {
                 self.codegen(expr);
-                let v = self
-                    .resolve_variable(name)
-                    .expect("TODO could not resolve variable");
+                let v = self.resolve_variable(name).unwrap();
                 match v {
                     Variable::Local(v) => {
                         match t.as_ref().unwrap() {
@@ -235,14 +237,19 @@ impl Compiler {
                     _ => panic!(),
                 }
             }
-            Ast::If(expr, stmt, else_stmt, _) => {
-                self.codegen(expr);
+            Ast::If {
+                condition,
+                body,
+                else_body,
+                ..
+            } => {
+                self.codegen(condition);
 
                 self.chunk().push_op(OpCode::JumpIfFalse as u8);
                 let else_jump = self.chunk().push_op_u16(0);
                 self.chunk().push_op(OpCode::PopU8 as u8);
 
-                self.codegen(stmt);
+                self.codegen(body);
 
                 self.chunk().push_op(OpCode::Jump as u8);
                 let if_jump = self.chunk().push_op_u16(0);
@@ -250,22 +257,24 @@ impl Compiler {
                 self.chunk().backpatch_jump(else_jump);
                 self.chunk().push_op(OpCode::PopU8 as u8);
 
-                if let Some(else_stmt) = else_stmt {
+                if let Some(else_stmt) = else_body {
                     self.codegen(else_stmt);
                 }
 
                 self.chunk().backpatch_jump(if_jump);
             }
-            Ast::While(expr, stmt, _) => {
+            Ast::While {
+                condition, body, ..
+            } => {
                 let loop_start = self.chunk().len_code();
 
-                self.codegen(expr);
+                self.codegen(condition);
 
                 self.chunk().push_op(OpCode::JumpIfFalse as u8);
                 let done_jump = self.chunk().push_op_u16(0);
                 self.chunk().push_op(OpCode::PopU8 as u8);
 
-                self.codegen(stmt);
+                self.codegen(body);
 
                 self.chunk().push_op(OpCode::Jump as u8);
                 self.chunk().push_op_u16(loop_start);
@@ -273,7 +282,7 @@ impl Compiler {
                 self.chunk().backpatch_jump(done_jump);
                 self.chunk().push_op(OpCode::PopU8 as u8);
             }
-            Ast::ExprStatement(expr, t, _) => {
+            Ast::ExprStatement { expr, t, .. } => {
                 self.codegen(expr);
                 self.pop_type(t.as_ref().unwrap());
             }
@@ -282,7 +291,7 @@ impl Compiler {
                 args,
                 ret_t,
                 captured,
-                position,
+                pos,
             } => {
                 let prev_chunk = self.current_chunk;
                 self.chunks.push(Chunk::new());
@@ -318,11 +327,11 @@ impl Compiler {
                     self.chunk().push_op_u16(c);
                 } else {
                     for var in captured.iter() {
-                        self.codegen(&Ast::Variable(
-                            var.0.clone(),
-                            Some(var.1.clone().unwrap()),
-                            *position,
-                        ));
+                        self.codegen(&Ast::Variable {
+                            name: var.0.clone(),
+                            t: var.1.clone(),
+                            pos: *pos,
+                        });
                         match var.1.as_ref().unwrap() {
                             AstType::Float => self.chunk().push_op(OpCode::HeapifyFloat as u8),
                             _ => todo!(),
@@ -333,7 +342,13 @@ impl Compiler {
                     self.chunk().push_op(captured.len() as u8);
                 }
             }
-            Ast::Call(ident, args, args_width, is_closure, _) => {
+            Ast::Call {
+                ident,
+                args,
+                args_width,
+                is_closure,
+                ..
+            } => {
                 for arg in args.iter() {
                     self.codegen(arg);
                 }

@@ -3,28 +3,79 @@ use super::*;
 #[derive(Debug, Clone)]
 pub enum Ast {
     Program(Vec<Ast>),
-    Block(Vec<Ast>, usize),
-    Print(Box<Ast>, Option<AstType>, usize),
-    Return(Option<Box<Ast>>, Option<AstType>, usize),
+    Block {
+        cont: Vec<Ast>,
+        pos: usize,
+    },
+    Print {
+        expr: Box<Ast>,
+        t: Option<AstType>,
+        pos: usize,
+    },
+    Return {
+        expr: Option<Box<Ast>>,
+        t: Option<AstType>,
+        pos: usize,
+    },
 
-    Declaration(String, Box<Ast>, Option<AstType>, usize),
-    FuncDeclaration(String, Box<Ast>, Vec<AstType>, AstType, usize),
-    Variable(String, Option<AstType>, usize),
-    Assign(String, Box<Ast>, Option<AstType>, Option<bool>, usize),
+    Declaration {
+        name: String,
+        expr: Box<Ast>,
+        t: Option<AstType>,
+        pos: usize,
+    },
+    FuncDeclaration {
+        name: String,
+        func: Box<Ast>,
+        args_t: Vec<AstType>,
+        ret_t: AstType,
+        pos: usize,
+    },
+    Variable {
+        name: String,
+        t: Option<AstType>,
+        pos: usize,
+    },
+    Assign {
+        name: String,
+        expr: Box<Ast>,
+        t: Option<AstType>,
+        move_to_heap: Option<bool>,
+        pos: usize,
+    },
 
-    If(Box<Ast>, Box<Ast>, Option<Box<Ast>>, usize),
-    While(Box<Ast>, Box<Ast>, usize),
+    If {
+        condition: Box<Ast>,
+        body: Box<Ast>,
+        else_body: Option<Box<Ast>>,
+        pos: usize,
+    },
+    While {
+        condition: Box<Ast>,
+        body: Box<Ast>,
+        pos: usize,
+    },
 
-    ExprStatement(Box<Ast>, Option<AstType>, usize),
+    ExprStatement {
+        expr: Box<Ast>,
+        t: Option<AstType>,
+        pos: usize,
+    },
 
     Function {
         body: Box<Ast>,
         args: Vec<(String, AstType)>,
         captured: Vec<(String, Option<AstType>)>,
         ret_t: AstType,
-        position: usize,
+        pos: usize,
     },
-    Call(Box<Ast>, Vec<Ast>, Option<u8>, Option<bool>, usize),
+    Call {
+        ident: Box<Ast>,
+        args: Vec<Ast>,
+        args_width: Option<u8>,
+        is_closure: Option<bool>,
+        pos: usize,
+    },
 
     Float(f64, usize),
     Bool(bool, usize),
@@ -321,7 +372,12 @@ fn var_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
         "expected ';' after declaration",
     )?;
 
-    Ok(Ast::Declaration(name, Box::new(expr), None, pos))
+    Ok(Ast::Declaration {
+        name,
+        expr: Box::new(expr),
+        t: None,
+        pos,
+    })
 }
 
 fn parse_variable(lexer: &mut Lexer) -> ParserResult<String> {
@@ -358,9 +414,15 @@ fn named_variable(lexer: &mut Lexer) -> ParserResult<Ast> {
         TokenType::Equal => {
             lexer.next();
             let expr = expression(lexer)?;
-            Ok(Ast::Assign(name, Box::new(expr), None, None, pos))
+            Ok(Ast::Assign {
+                name,
+                expr: Box::new(expr),
+                t: None,
+                move_to_heap: None,
+                pos,
+            })
         }
-        _ => Ok(Ast::Variable(name, None, pos)),
+        _ => Ok(Ast::Variable { name, t: None, pos }),
     }
 }
 
@@ -398,7 +460,11 @@ fn print_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
         |t| t == &TokenType::Semicolon,
         "expected ';' after print statement",
     )?;
-    Ok(Ast::Print(Box::new(expr), None, pos))
+    Ok(Ast::Print {
+        expr: Box::new(expr),
+        t: None,
+        pos,
+    })
 }
 
 fn if_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
@@ -418,7 +484,12 @@ fn if_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
         }
         _ => None,
     };
-    Ok(Ast::If(Box::new(expr), Box::new(stmt), else_stmt, pos))
+    Ok(Ast::If {
+        condition: Box::new(expr),
+        body: Box::new(stmt),
+        else_body: else_stmt,
+        pos,
+    })
 }
 
 fn block(lexer: &mut Lexer) -> ParserResult<Ast> {
@@ -448,7 +519,7 @@ fn block(lexer: &mut Lexer) -> ParserResult<Ast> {
     if errors.len() > 0 {
         Err(ParserError::BlockErrors(errors))
     } else {
-        Ok(Ast::Block(parsed, pos))
+        Ok(Ast::Block { cont: parsed, pos })
     }
 }
 
@@ -456,7 +527,11 @@ fn expression_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
     let pos = lexer.prev().unwrap().start;
     let expr = expression(lexer)?;
     consume(lexer, |t| t == &TokenType::Semicolon, "expected ';'")?;
-    Ok(Ast::ExprStatement(Box::new(expr), None, pos))
+    Ok(Ast::ExprStatement {
+        expr: Box::new(expr),
+        t: None,
+        pos,
+    })
 }
 
 fn logic_and(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
@@ -486,7 +561,11 @@ fn while_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
     )?;
     let stmt = statement(lexer)?;
 
-    Ok(Ast::While(Box::new(expr), Box::new(stmt), pos))
+    Ok(Ast::While {
+        condition: Box::new(expr),
+        body: Box::new(stmt),
+        pos,
+    })
 }
 
 fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
@@ -548,14 +627,21 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
         statement(lexer)?
     } else {
         let ret_expr = expression(lexer)?;
-        Ast::Block(vec![Ast::Return(Some(Box::new(ret_expr)), None, pos)], pos)
+        Ast::Block {
+            cont: vec![Ast::Return {
+                expr: Some(Box::new(ret_expr)),
+                t: None,
+                pos,
+            }],
+            pos,
+        }
     };
     Ok(Ast::Function {
         body: Box::new(body),
         args,
         captured,
         ret_t,
-        position: pos,
+        pos,
     })
 }
 
@@ -573,7 +659,13 @@ fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
         |t| t == &TokenType::RightPar,
         "expected ')' after arguments",
     )?;
-    Ok(Ast::Call(Box::new(ident), args, None, None, pos))
+    Ok(Ast::Call {
+        ident: Box::new(ident),
+        args,
+        args_width: None,
+        is_closure: None,
+        pos,
+    })
 }
 
 fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
@@ -585,7 +677,7 @@ fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
             args,
             captured,
             ret_t,
-            position,
+            pos,
         } => {
             if captured.len() > 0 {
                 return Err(ParserError::Unexpected(
@@ -594,19 +686,19 @@ fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
                 ));
             }
 
-            Ast::FuncDeclaration(
+            Ast::FuncDeclaration {
                 name,
-                Box::new(Ast::Function {
+                func: Box::new(Ast::Function {
                     body,
                     args: args.clone(),
                     captured,
                     ret_t: ret_t.clone(),
-                    position,
+                    pos,
                 }),
-                args.into_iter().map(|a| a.1).collect(),
+                args_t: args.into_iter().map(|a| a.1).collect(),
                 ret_t,
-                position,
-            )
+                pos,
+            }
         }
         _ => panic!(),
     };
@@ -626,5 +718,5 @@ fn return_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
         |t| t == &TokenType::Semicolon,
         "expected ';' after return statement",
     )?;
-    Ok(Ast::Return(expr, None, pos))
+    Ok(Ast::Return { expr, t: None, pos })
 }
