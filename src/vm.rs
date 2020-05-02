@@ -245,6 +245,14 @@ impl VM {
                     let v = self.stack.get_f64(top as Adr);
                     self.heap.set_object(adr, Obj::Float(v));
                 }
+                OpCode::AssignHeapBool => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let adr = self.stack.get_u32((i + frame_offset) as Adr);
+                    let top = self.len_stack() - 1;
+                    let v = self.stack.get_bool(top as Adr);
+                    self.heap.set_object(adr, Obj::Bool(v));
+                }
                 OpCode::JumpIfFalse => {
                     let offset = chunk.get_op_u16(ip);
                     ip += 2;
@@ -320,6 +328,11 @@ impl VM {
                     let adr = self.heap.add_object(Obj::Float(n));
                     self.stack.push_u32(adr);
                 }
+                OpCode::HeapifyBool => {
+                    let b = self.stack.pop_bool();
+                    let adr = self.heap.add_object(Obj::Bool(b));
+                    self.stack.push_u32(adr);
+                }
                 OpCode::Closure => {
                     let function = chunk.get_op_u16(ip);
                     let n_vars = chunk.get_op(ip + 2);
@@ -342,6 +355,13 @@ impl VM {
                     let adr = self.stack.get_u32((i + frame_offset) as Adr);
                     let v = self.heap.get_float(adr);
                     self.stack.push_f64(v.unwrap());
+                }
+                OpCode::HeapBool => {
+                    let i = chunk.get_op_u16(ip);
+                    ip += 2;
+                    let adr = self.stack.get_u32((i + frame_offset) as Adr);
+                    let v = self.heap.get_bool(adr);
+                    self.stack.push_bool(v.unwrap());
                 }
             }
         }

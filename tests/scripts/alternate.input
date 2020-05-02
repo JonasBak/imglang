@@ -1,0 +1,20 @@
+fun getAlternator(first float, second float) <;float>* {
+  var switch = false;
+  return fun[switch, first, second]() float {
+    switch = !switch;
+    if (switch) {
+      return first;
+    } else {
+      return second;
+    }
+  };
+}
+
+var alternator = getAlternator(10, 20);
+
+print alternator();
+print alternator();
+print alternator();
+print alternator();
+print alternator();
+print alternator();

@@ -132,7 +132,8 @@ pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
         | op @ OpCode::PrintString
         | op @ OpCode::IncreaseRC
         | op @ OpCode::DecreaseRC
-        | op @ OpCode::HeapifyFloat => print_simple(op),
+        | op @ OpCode::HeapifyFloat
+        | op @ OpCode::HeapifyBool => print_simple(op),
         op @ OpCode::Return | op @ OpCode::Call | op @ OpCode::CallClosure => {
             print_unary_u8(op, chunk.get_op(ip + 1))
         }
@@ -148,11 +149,13 @@ pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
         | op @ OpCode::AssignU64
         | op @ OpCode::AssignObj
         | op @ OpCode::AssignHeapFloat
+        | op @ OpCode::AssignHeapBool
         | op @ OpCode::JumpIfFalse
         | op @ OpCode::Jump
         | op @ OpCode::Function
         | op @ OpCode::PushU16
-        | op @ OpCode::HeapFloat => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
+        | op @ OpCode::HeapFloat
+        | op @ OpCode::HeapBool => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
         op @ OpCode::Closure => {
             print_simple(op);
             // TODO

@@ -179,8 +179,12 @@ impl Compiler {
                                 self.chunk().push_op(OpCode::VariableU64 as u8);
                                 false
                             }
-                            AstType::HeapAllocated(_) => {
-                                self.chunk().push_op(OpCode::HeapFloat as u8);
+                            AstType::HeapAllocated(inner_t) => {
+                                match **inner_t {
+                                    AstType::Float => self.chunk().push_op(OpCode::HeapFloat as u8),
+                                    AstType::Bool => self.chunk().push_op(OpCode::HeapBool as u8),
+                                    _ => todo!(),
+                                };
                                 false
                             }
                             AstType::Closure(..) | AstType::String => {
@@ -220,6 +224,9 @@ impl Compiler {
                                     match **inner_t {
                                         AstType::Float => {
                                             self.chunk().push_op(OpCode::AssignHeapFloat as u8)
+                                        }
+                                        AstType::Bool => {
+                                            self.chunk().push_op(OpCode::AssignHeapBool as u8)
                                         }
                                         _ => todo!(),
                                     }
@@ -334,6 +341,7 @@ impl Compiler {
                         });
                         match var.1.as_ref().unwrap() {
                             AstType::Float => self.chunk().push_op(OpCode::HeapifyFloat as u8),
+                            AstType::Bool => self.chunk().push_op(OpCode::HeapifyBool as u8),
                             _ => todo!(),
                         };
                     }

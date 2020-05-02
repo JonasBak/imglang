@@ -11,6 +11,7 @@ pub struct Closure {
 pub enum Obj {
     String(String),
     Float(f64),
+    Bool(bool),
 
     Closure(Closure),
 
@@ -113,6 +114,13 @@ impl Heap {
     pub fn get_float(&self, i: HeapAdr) -> Option<f64> {
         self.get_object_ref(i).map(|obj| match obj {
             Obj::Float(f) => *f,
+            _ => todo!(),
+        })
+    }
+
+    pub fn get_bool(&self, i: HeapAdr) -> Option<bool> {
+        self.get_object_ref(i).map(|obj| match obj {
+            Obj::Bool(b) => *b,
             _ => todo!(),
         })
     }

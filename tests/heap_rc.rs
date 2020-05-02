@@ -152,3 +152,22 @@ fn count_objects_function_return_argument() {
     );
     assert_eq!(vm.heap_ptr().count_objects(), 1);
 }
+
+#[test]
+fn closure_variables_freed_correctly() {
+    let vm = run_script(
+        r#"
+        {
+            var a = 1;
+            var b = 2;
+            var closure = fun[a, b]() float {
+                var c = 3;
+                return a + b + c;
+            };
+            var closure2 = closure;
+            closure2();
+        }
+    "#,
+    );
+    assert_eq!(vm.heap_ptr().count_objects(), 0);
+}

@@ -60,3 +60,8 @@ fn nested_scopes() {
 fn closure_counter() {
     test_script("tests/scripts/counter");
 }
+
+#[test]
+fn closure_alternate() {
+    test_script("tests/scripts/alternate");
+}

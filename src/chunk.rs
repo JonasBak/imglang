@@ -49,6 +49,7 @@ generate_opcodes!(
     AssignU64,
     AssignObj,
     AssignHeapFloat,
+    AssignHeapBool,
     JumpIfFalse,
     Jump,
     Function,
@@ -57,8 +58,10 @@ generate_opcodes!(
     IncreaseRC,
     DecreaseRC,
     HeapifyFloat,
+    HeapifyBool,
     Closure,
     HeapFloat,
+    HeapBool,
 );
 
 pub type CodeAdr = u16;
