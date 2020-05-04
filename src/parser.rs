@@ -73,7 +73,7 @@ pub enum Ast {
         ident: Box<Ast>,
         args: Vec<Ast>,
         args_width: Option<u8>,
-        is_closure: Option<bool>,
+        call_t: Option<CallType>,
         pos: usize,
     },
 
@@ -663,7 +663,7 @@ fn call(lexer: &mut Lexer, ident: Ast) -> ParserResult<Ast> {
         ident: Box::new(ident),
         args,
         args_width: None,
-        is_closure: None,
+        call_t: None,
         pos,
     })
 }

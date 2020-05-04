@@ -13,12 +13,12 @@ fn test_script(prefix: &'static str) {
     let mut lexer = Lexer::new(&input).unwrap();
     let mut ast = parse(&mut lexer).unwrap();
 
-    TypeChecker::annotate_types(&mut ast).unwrap();
-    let chunks = Compiler::compile(&ast);
+    TypeChecker::annotate_types(&mut ast, None).unwrap();
+    let chunks = Compiler::compile(&ast, None);
 
     let mut output: Vec<u8> = vec![];
 
-    let mut vm = VM::new(chunks);
+    let mut vm = VM::new(chunks, None);
     vm.run(&mut output);
 
     let output = String::from_utf8(output).unwrap();

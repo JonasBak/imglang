@@ -24,20 +24,22 @@ struct CallFrame {
     args_width: StackAdr,
 }
 
-pub struct VM {
+pub struct VM<'a> {
     stack: ByteVector,
     heap: Heap,
     chunks: Vec<Chunk>,
     call_frames: Vec<CallFrame>,
+    externals: Option<&'a Externals>,
 }
 
-impl VM {
-    pub fn new(chunks: Vec<Chunk>) -> VM {
+impl<'a> VM<'a> {
+    pub fn new(chunks: Vec<Chunk>, externals: Option<&'a Externals>) -> VM {
         VM {
             stack: ByteVector::new(),
             heap: Heap::new(),
             chunks,
             call_frames: vec![],
+            externals,
         }
     }
     pub fn len_stack(&self) -> StackAdr {
@@ -312,6 +314,25 @@ impl VM {
                     for var in captured.iter() {
                         self.heap.increase_rc(*var);
                     }
+                }
+                OpCode::CallExternal => {
+                    let args_width = chunk.get_op(ip) as StackAdr;
+                    ip += 1;
+                    let func_i = self.stack.pop_u16();
+
+                    let offset = self.len_stack() - args_width;
+                    let ret = self
+                        .externals
+                        .unwrap()
+                        .dispatch(func_i, &mut self.stack, offset);
+                    self.stack.0.truncate(offset as usize);
+                    match ret {
+                        ExternalArg::Float(f) => {
+                            self.stack.push_f64(f);
+                        }
+                        ExternalArg::Nil => {}
+                        _ => todo!(),
+                    };
                 }
                 OpCode::IncreaseRC => {
                     let top = self.len_stack() - 4;

@@ -1,6 +1,7 @@
 mod chunk;
 mod compiler;
 mod debugger;
+mod externals;
 mod heap;
 mod lexer;
 mod parser;
@@ -11,6 +12,7 @@ mod vm;
 pub use chunk::*;
 pub use compiler::*;
 pub use debugger::*;
+pub use externals::*;
 pub use heap::*;
 pub use lexer::*;
 pub use parser::*;

@@ -134,9 +134,10 @@ pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
         | op @ OpCode::DecreaseRC
         | op @ OpCode::HeapifyFloat
         | op @ OpCode::HeapifyBool => print_simple(op),
-        op @ OpCode::Return | op @ OpCode::Call | op @ OpCode::CallClosure => {
-            print_unary_u8(op, chunk.get_op(ip + 1))
-        }
+        op @ OpCode::Return
+        | op @ OpCode::Call
+        | op @ OpCode::CallClosure
+        | op @ OpCode::CallExternal => print_unary_u8(op, chunk.get_op(ip + 1)),
         op @ OpCode::ConstantF64
         | op @ OpCode::ConstantString
         | op @ OpCode::VariableU8

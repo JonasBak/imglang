@@ -1,6 +1,7 @@
 mod chunk;
 mod compiler;
 mod debugger;
+mod externals;
 mod heap;
 mod lexer;
 mod parser;
@@ -11,6 +12,7 @@ mod vm;
 use chunk::*;
 use compiler::*;
 use debugger::*;
+use externals::*;
 use heap::*;
 use lexer::*;
 use parser::*;
@@ -44,14 +46,27 @@ fn main() {
         }
     };
 
+    let mut externals = Externals::new();
+    externals.add_function(
+        "testExternal".to_string(),
+        ExternalFunction {
+            args_t: vec![],
+            ret_t: AstType::Float,
+            dispatch: |args: Vec<ExternalArg>| -> ExternalArg {
+                println!("called external function");
+                return ExternalArg::Float(123.345);
+            },
+        },
+    );
+
     #[cfg(feature = "debug_build")]
     eprintln!("{:?}", ast);
 
-    if let Err(error) = TypeChecker::annotate_types(&mut ast) {
+    if let Err(error) = TypeChecker::annotate_types(&mut ast, Some(&externals)) {
         print_type_error(&source, error);
         return;
     }
-    let chunks = Compiler::compile(&ast);
+    let chunks = Compiler::compile(&ast, Some(&externals));
 
     #[cfg(feature = "debug_build")]
     eprintln!("{:?}", ast);
@@ -59,6 +74,6 @@ fn main() {
     #[cfg(feature = "debug_build")]
     disassemble_chunk(&chunks);
 
-    let mut vm = VM::new(chunks);
+    let mut vm = VM::new(chunks, Some(&externals));
     vm.run(&mut stdout());
 }

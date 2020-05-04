@@ -3,9 +3,17 @@ use std::collections::HashMap;
 use std::mem;
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum CallType {
+    Function,
+    Closure,
+    External,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum AstType {
     Function(Vec<AstType>, Box<AstType>),
     Closure(Vec<AstType>, Box<AstType>),
+    ExternalFunction(Vec<AstType>, Box<AstType>),
 
     Float,
     Bool,
@@ -21,6 +29,7 @@ impl AstType {
             AstType::Bool => 1,
             AstType::Float => 8,
             AstType::Function(..) => mem::size_of::<ChunkAdr>(),
+            AstType::ExternalFunction(..) => mem::size_of::<ExternalAdr>(),
             AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => {
                 mem::size_of::<HeapAdr>()
             }
@@ -52,19 +61,24 @@ enum Variable {
     Local(LocalVariable),
     Global(AstType),
 }
-pub struct TypeChecker {
+pub struct TypeChecker<'a> {
     variables: Vec<LocalVariable>,
     globals: HashMap<String, AstType>,
+    externals: Option<&'a Externals>,
     current_scope_depth: u16,
     is_root: bool,
     return_values: Vec<AstType>,
 }
 
-impl TypeChecker {
-    pub fn annotate_types(ast: &mut Ast) -> Result<(), TypeError> {
+impl<'a> TypeChecker<'a> {
+    pub fn annotate_types(
+        ast: &mut Ast,
+        externals: Option<&'a Externals>,
+    ) -> Result<(), TypeError> {
         let mut type_checker = TypeChecker {
             variables: vec![],
             globals: HashMap::new(),
+            externals,
             current_scope_depth: 0,
             is_root: true,
             return_values: vec![],
@@ -89,10 +103,18 @@ impl TypeChecker {
         if local.is_some() {
             return local;
         }
-        self.globals
+        let global = self
+            .globals
             .get(name)
             .cloned()
-            .map(|var| Variable::Global(var))
+            .map(|var| Variable::Global(var));
+        if global.is_some() {
+            return global;
+        }
+        self.externals
+            .map(|ext| ext.lookup_type(name))
+            .flatten()
+            .map(|t| Variable::Global(t))
     }
     fn annotate_type(&mut self, ast: &mut Ast) -> Result<AstType, TypeError> {
         let t = match ast {
@@ -359,7 +381,7 @@ impl TypeChecker {
                 ident,
                 args,
                 args_width,
-                is_closure,
+                call_t,
                 pos,
             } => {
                 let ident_t = self.annotate_type(ident)?;
@@ -369,11 +391,15 @@ impl TypeChecker {
                 }
                 let (func_args_t, ret_t) = match ident_t {
                     AstType::Closure(a, r) => {
-                        is_closure.replace(true);
+                        call_t.replace(CallType::Closure);
                         (a, r)
                     }
                     AstType::Function(a, r) => {
-                        is_closure.replace(false);
+                        call_t.replace(CallType::Function);
+                        (a, r)
+                    }
+                    AstType::ExternalFunction(a, r) => {
+                        call_t.replace(CallType::External);
                         (a, r)
                     }
                     t @ _ => {

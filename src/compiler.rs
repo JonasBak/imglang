@@ -12,25 +12,28 @@ struct LocalVariable {
 #[derive(Debug, Clone)]
 enum GlobalVariable {
     Function(ChunkAdr),
+    External(ExternalAdr),
 }
 enum Variable {
     Local(LocalVariable),
     Global(GlobalVariable),
 }
-pub struct Compiler {
+pub struct Compiler<'a> {
     variables: Vec<LocalVariable>,
     globals: HashMap<String, GlobalVariable>,
+    externals: Option<&'a Externals>,
     current_scope_depth: u16,
     chunks: Vec<Chunk>,
     current_chunk: ChunkAdr,
     is_root: bool,
 }
 
-impl Compiler {
-    pub fn compile(ast: &Ast) -> Vec<Chunk> {
+impl<'a> Compiler<'a> {
+    pub fn compile(ast: &Ast, externals: Option<&'a Externals>) -> Vec<Chunk> {
         let mut compiler = Compiler {
             variables: vec![],
             globals: HashMap::new(),
+            externals,
             current_scope_depth: 0,
             chunks: vec![Chunk::new()],
             current_chunk: 0,
@@ -66,7 +69,14 @@ impl Compiler {
         if local.is_some() {
             return local;
         }
-        self.globals.get(name).map(|v| Variable::Global(v.clone()))
+        let global = self.globals.get(name).map(|v| Variable::Global(v.clone()));
+        if global.is_some() {
+            return global;
+        }
+        self.externals
+            .map(|ext| ext.lookup_function(name))
+            .flatten()
+            .map(|t| Variable::Global(GlobalVariable::External(t)))
     }
     fn pop_type(&mut self, t: &AstType) {
         match t {
@@ -82,6 +92,9 @@ impl Compiler {
             AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => {
                 self.chunk().push_op(OpCode::DecreaseRC as u8);
                 self.chunk().push_op(OpCode::PopU32 as u8);
+            }
+            AstType::ExternalFunction(..) => {
+                self.chunk().push_op(OpCode::PopU16 as u8);
             }
             AstType::Nil => {}
         };
@@ -138,10 +151,11 @@ impl Compiler {
                     AstType::Bool => {
                         self.chunk().push_op(OpCode::PrintBool as u8);
                     }
-                    AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::Function(..) => {
-                        todo!()
-                    }
-                    AstType::Nil => todo!(),
+                    AstType::ExternalFunction(..)
+                    | AstType::Closure(..)
+                    | AstType::HeapAllocated(_)
+                    | AstType::Function(..)
+                    | AstType::Nil => todo!(),
                     AstType::String => {
                         self.chunk().push_op(OpCode::PrintString as u8);
                     }
@@ -191,7 +205,7 @@ impl Compiler {
                                 self.chunk().push_op(OpCode::VariableU32 as u8);
                                 true
                             }
-                            AstType::Nil => panic!(),
+                            AstType::ExternalFunction(..) | AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
                         if is_rc {
@@ -201,6 +215,10 @@ impl Compiler {
                     Variable::Global(GlobalVariable::Function(chunk_i)) => {
                         self.chunk().push_op(OpCode::PushU16 as u8);
                         self.chunk().push_op_u16(chunk_i);
+                    }
+                    Variable::Global(GlobalVariable::External(func_i)) => {
+                        self.chunk().push_op(OpCode::PushU16 as u8);
+                        self.chunk().push_op_u16(func_i);
                     }
                 }
             }
@@ -237,7 +255,7 @@ impl Compiler {
                             AstType::Closure(..) | AstType::String => {
                                 self.chunk().push_op(OpCode::AssignObj as u8)
                             }
-                            AstType::Nil => panic!(),
+                            AstType::ExternalFunction(..) | AstType::Nil => panic!(),
                         };
                         self.chunk().push_op_u16(v.offset);
                     }
@@ -354,7 +372,7 @@ impl Compiler {
                 ident,
                 args,
                 args_width,
-                is_closure,
+                call_t,
                 ..
             } => {
                 for arg in args.iter() {
@@ -365,11 +383,11 @@ impl Compiler {
 
                 let args_width = args_width.unwrap();
 
-                if is_closure.unwrap() {
-                    self.chunk().push_op(OpCode::CallClosure as u8);
-                } else {
-                    self.chunk().push_op(OpCode::Call as u8);
-                }
+                match call_t.as_ref().unwrap() {
+                    CallType::Function => self.chunk().push_op(OpCode::Call as u8),
+                    CallType::Closure => self.chunk().push_op(OpCode::CallClosure as u8),
+                    CallType::External => self.chunk().push_op(OpCode::CallExternal as u8),
+                };
                 self.chunk().push_op(args_width);
             }
             Ast::Float(n, _) => {

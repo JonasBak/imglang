@@ -55,6 +55,7 @@ generate_opcodes!(
     Function,
     Call,
     CallClosure,
+    CallExternal,
     IncreaseRC,
     DecreaseRC,
     HeapifyFloat,

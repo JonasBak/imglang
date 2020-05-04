@@ -4,12 +4,12 @@ fn run_script(input: &'static str) -> VM {
     let mut lexer = Lexer::new(&input.to_string()).unwrap();
     let mut ast = parse(&mut lexer).unwrap();
 
-    TypeChecker::annotate_types(&mut ast).unwrap();
-    let chunks = Compiler::compile(&ast);
+    TypeChecker::annotate_types(&mut ast, None).unwrap();
+    let chunks = Compiler::compile(&ast, None);
 
     let mut output: Vec<u8> = vec![];
 
-    let mut vm = VM::new(chunks);
+    let mut vm = VM::new(chunks, None);
     vm.run(&mut output);
     vm
 }
