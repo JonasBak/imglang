@@ -49,12 +49,7 @@ impl<'a> Compiler<'a> {
         self.variables.push(LocalVariable {
             name: name.clone(),
             depth: self.current_scope_depth,
-            offset: self
-                .variables
-                .iter()
-                .last()
-                .map(|v| v.offset + v.t.size())
-                .unwrap_or(0),
+            offset: self.variables.len() as StackAdr,
             t,
         });
     }
@@ -80,21 +75,15 @@ impl<'a> Compiler<'a> {
     }
     fn pop_type(&mut self, t: &AstType) {
         match t {
-            AstType::Bool => {
-                self.chunk().push_op(OpCode::PopU8);
-            }
-            AstType::Function(..) => {
-                self.chunk().push_op(OpCode::PopU16);
-            }
-            AstType::Float => {
-                self.chunk().push_op(OpCode::PopU64);
+            AstType::Bool
+            | AstType::Function(..)
+            | AstType::Float
+            | AstType::ExternalFunction(..) => {
+                self.chunk().push_op(OpCode::Pop);
             }
             AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => {
                 self.chunk().push_op(OpCode::DecreaseRC);
-                self.chunk().push_op(OpCode::PopU32);
-            }
-            AstType::ExternalFunction(..) => {
-                self.chunk().push_op(OpCode::PopU16);
+                self.chunk().push_op(OpCode::Pop);
             }
             AstType::Nil => {}
         };
@@ -111,13 +100,12 @@ impl<'a> Compiler<'a> {
             .collect();
         for obj_var in objects.into_iter() {
             // TODO change to OpCode::DecreaseRCAt or something to get fewer ops
-            self.chunk()
-                .push_op(OpCode::VariableU32 { stack_i: obj_var });
+            self.chunk().push_op(OpCode::Variable { stack_i: obj_var });
             self.chunk().push_op(OpCode::DecreaseRC);
-            self.chunk().push_op(OpCode::PopU32);
+            self.chunk().push_op(OpCode::Pop);
         }
         self.chunk().push_op(OpCode::Return {
-            ret_width: t.size() as u8,
+            return_value: *t != AstType::Nil,
         });
     }
     fn pop_variables(&mut self) {
@@ -132,7 +120,9 @@ impl<'a> Compiler<'a> {
                 for p in ps.iter() {
                     self.codegen(p);
                 }
-                self.chunk().push_op(OpCode::Return { ret_width: 0 });
+                self.chunk().push_op(OpCode::Return {
+                    return_value: false,
+                });
             }
             Ast::Block { cont, .. } => {
                 self.current_scope_depth += 1;
@@ -174,26 +164,15 @@ impl<'a> Compiler<'a> {
                     GlobalVariable::Function(self.chunks.len() as ChunkAdr),
                 );
                 self.codegen(func);
-                self.chunk().push_op(OpCode::PopU16);
+                self.chunk().push_op(OpCode::Pop);
             }
             Ast::Variable { name, t, .. } => {
                 let v = self.resolve_variable(name).unwrap();
                 match v {
                     Variable::Local(v) => {
                         let is_rc = match t.as_ref().unwrap() {
-                            AstType::Bool => {
-                                self.chunk()
-                                    .push_op(OpCode::VariableU8 { stack_i: v.offset });
-                                false
-                            }
-                            AstType::Function { .. } => {
-                                self.chunk()
-                                    .push_op(OpCode::VariableU16 { stack_i: v.offset });
-                                false
-                            }
-                            AstType::Float => {
-                                self.chunk()
-                                    .push_op(OpCode::VariableU64 { stack_i: v.offset });
+                            AstType::Bool | AstType::Function { .. } | AstType::Float => {
+                                self.chunk().push_op(OpCode::Variable { stack_i: v.offset });
                                 false
                             }
                             AstType::HeapAllocated(inner_t) => {
@@ -209,8 +188,7 @@ impl<'a> Compiler<'a> {
                                 false
                             }
                             AstType::Closure(..) | AstType::String => {
-                                self.chunk()
-                                    .push_op(OpCode::VariableU32 { stack_i: v.offset });
+                                self.chunk().push_op(OpCode::Variable { stack_i: v.offset });
                                 true
                             }
                             AstType::ExternalFunction(..) | AstType::Nil => panic!(),
@@ -239,15 +217,9 @@ impl<'a> Compiler<'a> {
                 match v {
                     Variable::Local(v) => {
                         match t.as_ref().unwrap() {
-                            AstType::Bool => {
-                                self.chunk().push_op(OpCode::AssignU8 { stack_i: v.offset })
+                            AstType::Bool | AstType::Function(..) | AstType::Float => {
+                                self.chunk().push_op(OpCode::Assign { stack_i: v.offset })
                             }
-                            AstType::Function(..) => self
-                                .chunk()
-                                .push_op(OpCode::AssignU16 { stack_i: v.offset }),
-                            AstType::Float => self
-                                .chunk()
-                                .push_op(OpCode::AssignU64 { stack_i: v.offset }),
                             AstType::HeapAllocated(inner_t) => {
                                 if move_to_heap.unwrap() {
                                     match **inner_t {
@@ -282,14 +254,14 @@ impl<'a> Compiler<'a> {
                 self.codegen(condition);
 
                 let else_jump = self.chunk().push_op(OpCode::JumpIfFalse { ip: 0 });
-                self.chunk().push_op(OpCode::PopU8);
+                self.chunk().push_op(OpCode::Pop);
 
                 self.codegen(body);
 
                 let if_jump = self.chunk().push_op(OpCode::Jump { ip: 0 });
 
                 self.chunk().backpatch_jump(else_jump);
-                self.chunk().push_op(OpCode::PopU8);
+                self.chunk().push_op(OpCode::Pop);
 
                 if let Some(else_stmt) = else_body {
                     self.codegen(else_stmt);
@@ -305,14 +277,14 @@ impl<'a> Compiler<'a> {
                 self.codegen(condition);
 
                 let done_jump = self.chunk().push_op(OpCode::JumpIfFalse { ip: 0 });
-                self.chunk().push_op(OpCode::PopU8);
+                self.chunk().push_op(OpCode::Pop);
 
                 self.codegen(body);
 
                 self.chunk().push_op(OpCode::Jump { ip: loop_start });
 
                 self.chunk().backpatch_jump(done_jump);
-                self.chunk().push_op(OpCode::PopU8);
+                self.chunk().push_op(OpCode::Pop);
             }
             Ast::ExprStatement { expr, t, .. } => {
                 self.codegen(expr);
@@ -496,7 +468,7 @@ impl<'a> Compiler<'a> {
 
                 let false_jump = self.chunk().push_op(OpCode::JumpIfFalse { ip: 0 });
 
-                self.chunk().push_op(OpCode::PopU8);
+                self.chunk().push_op(OpCode::Pop);
 
                 self.codegen(r);
 
@@ -511,7 +483,7 @@ impl<'a> Compiler<'a> {
 
                 self.chunk().backpatch_jump(false_jump);
 
-                self.chunk().push_op(OpCode::PopU8);
+                self.chunk().push_op(OpCode::Pop);
 
                 self.codegen(r);
 

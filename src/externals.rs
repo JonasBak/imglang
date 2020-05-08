@@ -57,7 +57,7 @@ impl Externals {
     pub fn dispatch(
         &self,
         adr: ExternalAdr,
-        stack: &mut ByteVector,
+        stack: &mut Stack,
         mut offset: StackAdr,
     ) -> ExternalArg {
         let func = self.functions.get(adr as usize).unwrap();
@@ -65,12 +65,12 @@ impl Externals {
         for arg_t in func.args_t.iter() {
             args.push(match arg_t {
                 AstType::Float => {
-                    let f = stack.get_f64(offset as Adr);
+                    let f = stack.get(offset).into();
                     ExternalArg::Float(f)
                 }
                 _ => todo!(),
             });
-            offset += arg_t.size();
+            offset += 1;
         }
         (func.dispatch)(args)
     }

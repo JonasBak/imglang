@@ -24,19 +24,6 @@ pub enum AstType {
     HeapAllocated(Box<AstType>),
 }
 impl AstType {
-    pub fn size(&self) -> StackAdr {
-        let n = match self {
-            AstType::Bool => 1,
-            AstType::Float => 8,
-            AstType::Function(..) => mem::size_of::<ChunkAdr>(),
-            AstType::ExternalFunction(..) => mem::size_of::<ExternalAdr>(),
-            AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => {
-                mem::size_of::<HeapAdr>()
-            }
-            AstType::Nil => 0,
-        };
-        n as StackAdr
-    }
     pub fn is_obj(&self) -> bool {
         match self {
             AstType::HeapAllocated(_) | AstType::Closure(_, _) | AstType::String => true,
@@ -415,7 +402,7 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
-                args_width.replace(args_t.iter().map(|t| t.size()).fold(0, |a, b| a + b) as u8);
+                args_width.replace(args_t.len() as u8);
                 *ret_t.clone()
             }
             Ast::Float(_, _) => AstType::Float,
