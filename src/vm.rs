@@ -21,7 +21,7 @@ struct CallFrame {
     parent_ip: CodeAdr,
     parent_chunk: ChunkAdr,
     parent_frame_offset: StackAdr,
-    args_width: StackAdr,
+    args_width: u8,
 }
 
 pub struct VM<'a> {
@@ -59,19 +59,18 @@ impl<'a> VM<'a> {
             let chunk = &self.chunks[current_chunk as usize];
             #[cfg(feature = "debug_runtime")]
             {
-                eprint!(
-                    "{:0>4}\tchunk:{: >3} stack:{: >4} nested:{: >2}\t",
+                eprintln!(
+                    "{:0>4}\tchunk:{: >3} stack:{: >4} nested:{: >2}\t{:?}",
                     ip,
                     current_chunk,
                     self.len_stack(),
                     self.call_frames.len(),
+                    chunk.get_op(ip)
                 );
-                disassemble(&chunk, ip);
             }
             ip = ip + 1;
-            match OpCode::from(chunk.get_op(ip - 1)) {
-                OpCode::Return => {
-                    let return_width = chunk.get_op(ip) as StackAdr;
+            match chunk.get_op(ip - 1) {
+                OpCode::Return { ret_width } => {
                     if self.call_frames.len() == 0 {
                         return;
                     }
@@ -83,13 +82,13 @@ impl<'a> VM<'a> {
                         ..
                     } = self.call_frames.pop().unwrap();
 
-                    let return_pos = self.len_stack() - return_width;
+                    let return_pos = self.len_stack() - ret_width as StackAdr;
                     self.stack
                         .0
                         .copy_within(return_pos as usize.., frame_offset as usize);
                     self.stack
                         .0
-                        .truncate((frame_offset + return_width) as usize);
+                        .truncate((frame_offset + ret_width as StackAdr) as usize);
 
                     ip = parent_ip;
                     current_chunk = parent_chunk;
@@ -109,16 +108,12 @@ impl<'a> VM<'a> {
                     writeln!(out, "{}", string).unwrap();
                     self.heap.decrease_rc(a);
                 }
-                OpCode::ConstantF64 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let v = chunk.get_const_f64(i);
+                OpCode::ConstantF64 { data_i } => {
+                    let v = chunk.get_const_f64(data_i);
                     self.stack.push_f64(v);
                 }
-                OpCode::ConstantString => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let string_data = chunk.get_const_string(i);
+                OpCode::ConstantString { data_i } => {
+                    let string_data = chunk.get_const_string(data_i);
                     let string = self.heap.add_object(Obj::String(string_data));
                     self.stack.push_u32(string);
                 }
@@ -140,9 +135,7 @@ impl<'a> VM<'a> {
                 OpCode::False => {
                     self.stack.push_bool(false);
                 }
-                OpCode::PushU16 => {
-                    let data = chunk.get_op_u16(ip);
-                    ip += 2;
+                OpCode::PushU16 { data } => {
                     self.stack.push_u16(data);
                 }
                 OpCode::PopU8 => {
@@ -177,104 +170,74 @@ impl<'a> VM<'a> {
                     let l = self.stack.pop_f64();
                     self.stack.push_bool(l < r);
                 }
-                OpCode::VariableU8 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let v = self.stack.get_u8((i + frame_offset) as Adr);
+                OpCode::VariableU8 { stack_i } => {
+                    let v = self.stack.get_u8((stack_i + frame_offset) as Adr);
                     self.stack.push_u8(v);
                 }
-                OpCode::VariableU16 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let v = self.stack.get_u16((i + frame_offset) as Adr);
+                OpCode::VariableU16 { stack_i } => {
+                    let v = self.stack.get_u16((stack_i + frame_offset) as Adr);
                     self.stack.push_u16(v);
                 }
-                OpCode::VariableU32 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let v = self.stack.get_u32((i + frame_offset) as Adr);
+                OpCode::VariableU32 { stack_i } => {
+                    let v = self.stack.get_u32((stack_i + frame_offset) as Adr);
                     self.stack.push_u32(v);
                 }
-                OpCode::VariableU64 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let v = self.stack.get_u64((i + frame_offset) as Adr);
+                OpCode::VariableU64 { stack_i } => {
+                    let v = self.stack.get_u64((stack_i + frame_offset) as Adr);
                     self.stack.push_u64(v);
                 }
-                OpCode::AssignU8 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
+                OpCode::AssignU8 { stack_i } => {
                     let top = self.len_stack() - 1;
                     let v = self.stack.get_u8(top as Adr);
-                    self.stack.set_u8(v, (i + frame_offset) as Adr);
+                    self.stack.set_u8(v, (stack_i + frame_offset) as Adr);
                 }
-                OpCode::AssignU16 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
+                OpCode::AssignU16 { stack_i } => {
                     let top = self.len_stack() - 2;
                     let v = self.stack.get_u16(top as Adr);
-                    self.stack.set_u16(v, (i + frame_offset) as Adr);
+                    self.stack.set_u16(v, (stack_i + frame_offset) as Adr);
                 }
-                OpCode::AssignU32 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
+                OpCode::AssignU32 { stack_i } => {
                     let top = self.len_stack() - 4;
                     let v = self.stack.get_u32(top as Adr);
-                    self.stack.set_u32(v, (i + frame_offset) as Adr);
+                    self.stack.set_u32(v, (stack_i + frame_offset) as Adr);
                 }
-                OpCode::AssignU64 => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
+                OpCode::AssignU64 { stack_i } => {
                     let top = self.len_stack() - 8;
                     let v = self.stack.get_u64(top as Adr);
-                    self.stack.set_u64(v, (i + frame_offset) as Adr);
+                    self.stack.set_u64(v, (stack_i + frame_offset) as Adr);
                 }
-                OpCode::AssignObj => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
+                OpCode::AssignObj { stack_i } => {
                     let top = self.len_stack() - 4;
                     let new_val = self.stack.get_u32(top as Adr);
-                    let old_val = self.stack.get_u32((i + frame_offset) as Adr);
+                    let old_val = self.stack.get_u32((stack_i + frame_offset) as Adr);
                     self.heap.increase_rc(new_val);
                     self.heap.decrease_rc(old_val);
-                    self.stack.set_u32(new_val, (i + frame_offset) as Adr);
+                    self.stack.set_u32(new_val, (stack_i + frame_offset) as Adr);
                 }
-                OpCode::AssignHeapFloat => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let adr = self.stack.get_u32((i + frame_offset) as Adr);
+                OpCode::AssignHeapFloat { stack_i } => {
+                    let adr = self.stack.get_u32((stack_i + frame_offset) as Adr);
                     let top = self.len_stack() - 8;
                     let v = self.stack.get_f64(top as Adr);
                     self.heap.set_object(adr, Obj::Float(v));
                 }
-                OpCode::AssignHeapBool => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let adr = self.stack.get_u32((i + frame_offset) as Adr);
+                OpCode::AssignHeapBool { stack_i } => {
+                    let adr = self.stack.get_u32((stack_i + frame_offset) as Adr);
                     let top = self.len_stack() - 1;
                     let v = self.stack.get_bool(top as Adr);
                     self.heap.set_object(adr, Obj::Bool(v));
                 }
-                OpCode::JumpIfFalse => {
-                    let offset = chunk.get_op_u16(ip);
-                    ip += 2;
+                OpCode::JumpIfFalse { ip: jmp_ip } => {
                     let top = self.len_stack() - 1;
                     let v = self.stack.get_bool(top as Adr);
                     if !v {
-                        ip = offset;
+                        ip = jmp_ip;
                     }
                 }
-                OpCode::Jump => {
-                    ip = chunk.get_op_u16(ip);
-                }
-                OpCode::Function => {
-                    let chunk_i = chunk.get_op_u16(ip);
-                    ip += 2;
+                OpCode::Jump { ip: jmp_ip } => ip = jmp_ip,
+                OpCode::Function { chunk_i } => {
                     self.stack.push_u16(chunk_i);
                 }
-                OpCode::Call => {
-                    let args_width = chunk.get_op(ip) as StackAdr;
-                    ip += 1;
+                OpCode::Call { args_width } => {
                     let chunk_i = self.stack.pop_u16();
 
                     self.call_frames.push(CallFrame {
@@ -285,15 +248,13 @@ impl<'a> VM<'a> {
                     });
                     current_chunk = chunk_i;
                     ip = 0;
-                    frame_offset = self.len_stack() - args_width;
+                    frame_offset = self.len_stack() - args_width as StackAdr;
                 }
-                OpCode::CallClosure => {
-                    let mut args_width = chunk.get_op(ip) as StackAdr;
-                    ip += 1;
+                OpCode::CallClosure { args_width } => {
                     let closure_adr = self.stack.pop_u32();
 
                     let closure = self.heap.get_closure_ref(closure_adr).unwrap();
-                    args_width += closure.captured.len() as StackAdr * 4;
+                    let args_width = args_width + closure.captured.len() as u8 * 4;
 
                     for var in closure.captured.iter() {
                         self.stack.push_u32(*var);
@@ -307,7 +268,7 @@ impl<'a> VM<'a> {
                     });
                     current_chunk = closure.function;
                     ip = 0;
-                    frame_offset = self.len_stack() - args_width;
+                    frame_offset = self.len_stack() - args_width as StackAdr;
 
                     let captured = closure.captured.clone();
                     self.heap.decrease_rc(closure_adr);
@@ -315,12 +276,10 @@ impl<'a> VM<'a> {
                         self.heap.increase_rc(*var);
                     }
                 }
-                OpCode::CallExternal => {
-                    let args_width = chunk.get_op(ip) as StackAdr;
-                    ip += 1;
+                OpCode::CallExternal { args_width } => {
                     let func_i = self.stack.pop_u16();
 
-                    let offset = self.len_stack() - args_width;
+                    let offset = self.len_stack() - args_width as StackAdr;
                     let ret = self
                         .externals
                         .unwrap()
@@ -354,33 +313,29 @@ impl<'a> VM<'a> {
                     let adr = self.heap.add_object(Obj::Bool(b));
                     self.stack.push_u32(adr);
                 }
-                OpCode::Closure => {
-                    let function = chunk.get_op_u16(ip);
-                    let n_vars = chunk.get_op(ip + 2);
-                    ip += 3;
-
+                OpCode::Closure {
+                    chunk_i,
+                    capture_len,
+                } => {
                     let mut captured = Vec::new();
-                    for _ in 0..n_vars {
+                    for _ in 0..capture_len {
                         captured.push(self.stack.pop_u32());
                     }
                     captured = captured.into_iter().rev().collect();
 
-                    let adr = self
-                        .heap
-                        .add_object(Obj::Closure(Closure { function, captured }));
+                    let adr = self.heap.add_object(Obj::Closure(Closure {
+                        function: chunk_i,
+                        captured,
+                    }));
                     self.stack.push_u32(adr);
                 }
-                OpCode::HeapFloat => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let adr = self.stack.get_u32((i + frame_offset) as Adr);
+                OpCode::HeapFloat { stack_i } => {
+                    let adr = self.stack.get_u32((stack_i + frame_offset) as Adr);
                     let v = self.heap.get_float(adr);
                     self.stack.push_f64(v.unwrap());
                 }
-                OpCode::HeapBool => {
-                    let i = chunk.get_op_u16(ip);
-                    ip += 2;
-                    let adr = self.stack.get_u32((i + frame_offset) as Adr);
+                OpCode::HeapBool { stack_i } => {
+                    let adr = self.stack.get_u32((stack_i + frame_offset) as Adr);
                     let v = self.heap.get_bool(adr);
                     self.stack.push_bool(v.unwrap());
                 }

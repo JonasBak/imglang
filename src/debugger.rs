@@ -89,78 +89,9 @@ pub fn disassemble_chunk(chunks: &Vec<Chunk>) {
         eprintln!("{:*^64}", format!("BYTECODE CHUNK {}", i));
         let mut ip = 0;
         while ip < chunk.len_code() {
-            eprint!("{:0>6}\t", ip);
-            ip += disassemble(chunk, ip);
+            eprintln!("{:0>6}\t{:?}", ip, chunk.get_op(ip));
+            ip += 1;
         }
     }
     eprintln!("{:*^64}", "");
-}
-
-fn print_simple(op: OpCode) -> CodeAdr {
-    eprintln!("{:>3} {:<15}", op as u8, op.to_string());
-    1
-}
-fn print_unary_u8(op: OpCode, operand: u8) -> CodeAdr {
-    eprintln!("{:>3} {:<15} {:>3}", op as u8, op.to_string(), operand);
-    2
-}
-fn print_unary_u16(op: OpCode, operand: u16) -> CodeAdr {
-    eprintln!("{:>3} {:<15} {:>3}", op as u8, op.to_string(), operand);
-    3
-}
-
-pub fn disassemble(chunk: &Chunk, ip: CodeAdr) -> CodeAdr {
-    match OpCode::from(chunk.get_op(ip)) {
-        op @ OpCode::NegateF64
-        | op @ OpCode::MultiplyF64
-        | op @ OpCode::DivideF64
-        | op @ OpCode::AddF64
-        | op @ OpCode::SubF64
-        | op @ OpCode::True
-        | op @ OpCode::False
-        | op @ OpCode::PopU8
-        | op @ OpCode::PopU16
-        | op @ OpCode::PopU32
-        | op @ OpCode::PopU64
-        | op @ OpCode::Not
-        | op @ OpCode::EqualU8
-        | op @ OpCode::EqualU64
-        | op @ OpCode::GreaterF64
-        | op @ OpCode::LesserF64
-        | op @ OpCode::PrintF64
-        | op @ OpCode::PrintBool
-        | op @ OpCode::PrintString
-        | op @ OpCode::IncreaseRC
-        | op @ OpCode::DecreaseRC
-        | op @ OpCode::HeapifyFloat
-        | op @ OpCode::HeapifyBool => print_simple(op),
-        op @ OpCode::Return
-        | op @ OpCode::Call
-        | op @ OpCode::CallClosure
-        | op @ OpCode::CallExternal => print_unary_u8(op, chunk.get_op(ip + 1)),
-        op @ OpCode::ConstantF64
-        | op @ OpCode::ConstantString
-        | op @ OpCode::VariableU8
-        | op @ OpCode::VariableU16
-        | op @ OpCode::VariableU32
-        | op @ OpCode::VariableU64
-        | op @ OpCode::AssignU8
-        | op @ OpCode::AssignU16
-        | op @ OpCode::AssignU32
-        | op @ OpCode::AssignU64
-        | op @ OpCode::AssignObj
-        | op @ OpCode::AssignHeapFloat
-        | op @ OpCode::AssignHeapBool
-        | op @ OpCode::JumpIfFalse
-        | op @ OpCode::Jump
-        | op @ OpCode::Function
-        | op @ OpCode::PushU16
-        | op @ OpCode::HeapFloat
-        | op @ OpCode::HeapBool => print_unary_u16(op, chunk.get_op_u16(ip + 1)),
-        op @ OpCode::Closure => {
-            print_simple(op);
-            // TODO
-            4
-        }
-    }
 }

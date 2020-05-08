@@ -1,24 +1,10 @@
 use super::*;
 
-macro_rules! generate_opcodes {
-    ($($types:ident,)+) => {
-        #[derive(Debug, Copy, Clone, PartialEq)]
-        pub enum OpCode { $($types,)+ }
-        const OPCODE_LOOKUP: &[OpCode] = &[
-            $(OpCode::$types,)+
-        ];
-        impl From<u8> for OpCode {
-            fn from(op: u8) -> Self {
-                OPCODE_LOOKUP[op as usize]
-            }
-        }
-    };
-}
-
-generate_opcodes!(
-    Return,
-    ConstantF64,
-    ConstantString,
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum OpCode {
+    Return { ret_width: u8 },
+    ConstantF64 { data_i: DataAdr },
+    ConstantString { data_i: DataAdr },
     NegateF64,
     MultiplyF64,
     DivideF64,
@@ -26,7 +12,7 @@ generate_opcodes!(
     SubF64,
     True,
     False,
-    PushU16,
+    PushU16 { data: u16 },
     PopU8,
     PopU16,
     PopU32,
@@ -39,43 +25,43 @@ generate_opcodes!(
     PrintF64,
     PrintBool,
     PrintString,
-    VariableU8,
-    VariableU16,
-    VariableU32,
-    VariableU64,
-    AssignU8,
-    AssignU16,
-    AssignU32,
-    AssignU64,
-    AssignObj,
-    AssignHeapFloat,
-    AssignHeapBool,
-    JumpIfFalse,
-    Jump,
-    Function,
-    Call,
-    CallClosure,
-    CallExternal,
+    VariableU8 { stack_i: StackAdr },
+    VariableU16 { stack_i: StackAdr },
+    VariableU32 { stack_i: StackAdr },
+    VariableU64 { stack_i: StackAdr },
+    AssignU8 { stack_i: StackAdr },
+    AssignU16 { stack_i: StackAdr },
+    AssignU32 { stack_i: StackAdr },
+    AssignU64 { stack_i: StackAdr },
+    AssignObj { stack_i: StackAdr },
+    AssignHeapFloat { stack_i: StackAdr },
+    AssignHeapBool { stack_i: StackAdr },
+    JumpIfFalse { ip: CodeAdr },
+    Jump { ip: CodeAdr },
+    Function { chunk_i: ChunkAdr },
+    Call { args_width: u8 },
+    CallClosure { args_width: u8 },
+    CallExternal { args_width: u8 },
     IncreaseRC,
     DecreaseRC,
     HeapifyFloat,
     HeapifyBool,
-    Closure,
-    HeapFloat,
-    HeapBool,
-);
+    Closure { chunk_i: ChunkAdr, capture_len: u8 },
+    HeapFloat { stack_i: StackAdr },
+    HeapBool { stack_i: StackAdr },
+}
 
 pub type CodeAdr = u16;
 pub type DataAdr = u16;
 
 pub struct Chunk {
-    code: ByteVector,
+    code: Vec<OpCode>,
     data: ByteVector,
 }
 impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
-            code: ByteVector::new(),
+            code: Vec::new(),
             data: ByteVector::new(),
         }
     }
@@ -83,29 +69,26 @@ impl Chunk {
         self.code.len() as CodeAdr
     }
 
-    pub fn push_op(&mut self, op: u8) -> CodeAdr {
-        self.code.push_u8(op) as CodeAdr
-    }
-    pub fn push_op_u16(&mut self, op: u16) -> CodeAdr {
-        self.code.push_u16(op) as CodeAdr
-    }
-    pub fn push_op_u32(&mut self, op: u32) -> CodeAdr {
-        self.code.push_u32(op) as CodeAdr
+    pub fn push_op(&mut self, op: OpCode) -> CodeAdr {
+        self.code.push(op);
+        (self.code.len() - 1) as CodeAdr
     }
 
-    pub fn get_op(&self, ip: CodeAdr) -> u8 {
-        self.code.get_u8(ip as Adr)
-    }
-    pub fn get_op_u16(&self, ip: CodeAdr) -> u16 {
-        self.code.get_u16(ip as Adr)
-    }
-    pub fn get_op_u32(&self, ip: CodeAdr) -> u32 {
-        self.code.get_u32(ip as Adr)
+    pub fn get_op(&self, ip: CodeAdr) -> OpCode {
+        self.code[ip as usize]
     }
 
-    pub fn backpatch_jump(&mut self, offset: CodeAdr) {
+    pub fn backpatch_jump(&mut self, ip: CodeAdr) {
         let top = self.code.len() as CodeAdr;
-        self.code.0[offset as usize..offset as usize + 2].copy_from_slice(&top.to_le_bytes());
+        match &mut self.code[ip as usize] {
+            OpCode::Jump { ref mut ip } => {
+                *ip = top;
+            }
+            OpCode::JumpIfFalse { ref mut ip } => {
+                *ip = top;
+            }
+            _ => panic!(),
+        }
     }
 
     pub fn add_const_f64(&mut self, data: f64) -> DataAdr {
