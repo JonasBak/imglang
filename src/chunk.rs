@@ -45,15 +45,29 @@ pub enum OpCode {
 pub type CodeAdr = u16;
 pub type DataAdr = u16;
 
+pub struct Data {
+    floats: Vec<f64>,
+    strings: Vec<String>,
+}
+
+impl Data {
+    pub fn new() -> Data {
+        Data {
+            floats: Vec::new(),
+            strings: Vec::new(),
+        }
+    }
+}
+
 pub struct Chunk {
     code: Vec<OpCode>,
-    data: ByteVector,
+    data: Data,
 }
 impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
             code: Vec::new(),
-            data: ByteVector::new(),
+            data: Data::new(),
         }
     }
     pub fn len_code(&self) -> CodeAdr {
@@ -83,20 +97,18 @@ impl Chunk {
     }
 
     pub fn add_const_f64(&mut self, data: f64) -> DataAdr {
-        self.data.push_f64(data) as DataAdr
+        self.data.floats.push(data);
+        self.data.floats.len() as DataAdr - 1
     }
-
     pub fn add_const_string(&mut self, data: &String) -> DataAdr {
-        self.data.push_string(data) as DataAdr
+        self.data.strings.push(data.clone());
+        self.data.strings.len() as DataAdr - 1
     }
 
     pub fn get_const_f64(&self, i: DataAdr) -> f64 {
-        self.data.get_f64(i as Adr)
-    }
-    pub fn get_const_u64(&self, i: DataAdr) -> u64 {
-        self.data.get_u64(i as Adr)
+        self.data.floats[i as usize]
     }
     pub fn get_const_string(&self, i: u16) -> String {
-        self.data.get_string(i as Adr)
+        self.data.strings[i as usize].clone()
     }
 }

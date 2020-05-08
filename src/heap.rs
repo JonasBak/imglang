@@ -31,6 +31,7 @@ impl Heap {
         }
     }
 
+    #[allow(dead_code)]
     pub fn count_objects(&self) -> HeapAdr {
         self.objects
             .iter()

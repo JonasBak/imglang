@@ -7,7 +7,6 @@ mod lexer;
 mod parser;
 mod stack;
 mod types;
-mod utils;
 mod vm;
 
 pub use chunk::*;
@@ -19,5 +18,4 @@ pub use lexer::*;
 pub use parser::*;
 pub use stack::*;
 pub use types::*;
-pub use utils::*;
 pub use vm::*;

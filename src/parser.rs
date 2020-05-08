@@ -124,7 +124,6 @@ pub const PREC_TERM: u32 = 60; // + -
 pub const PREC_FACTOR: u32 = 70; // * /
 pub const PREC_UNARY: u32 = 80; // ! -
 pub const PREC_CALL: u32 = 90; // . ()
-pub const PREC_PRIMARY: u32 = 100;
 
 fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool, msg: &'static str) -> ParserResult<()> {
     if !p(&lexer.current_t()) {

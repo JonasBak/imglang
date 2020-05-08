@@ -20,7 +20,6 @@ struct CallFrame {
     parent_ip: CodeAdr,
     parent_chunk: ChunkAdr,
     parent_frame_offset: StackAdr,
-    args_width: u8,
 }
 
 pub struct VM<'a> {
@@ -41,6 +40,7 @@ impl<'a> VM<'a> {
             externals,
         }
     }
+    #[allow(dead_code)]
     pub fn heap_ptr(&self) -> &Heap {
         &self.heap
     }
@@ -201,7 +201,6 @@ impl<'a> VM<'a> {
                         parent_ip: ip,
                         parent_chunk: current_chunk,
                         parent_frame_offset: frame_offset,
-                        args_width,
                     });
                     current_chunk = chunk_i;
                     ip = 0;
@@ -221,7 +220,6 @@ impl<'a> VM<'a> {
                         parent_ip: ip,
                         parent_chunk: current_chunk,
                         parent_frame_offset: frame_offset,
-                        args_width,
                     });
                     current_chunk = closure.function;
                     ip = 0;

@@ -7,7 +7,6 @@ mod lexer;
 mod parser;
 mod stack;
 mod types;
-mod utils;
 mod vm;
 
 use chunk::*;
@@ -22,7 +21,6 @@ use std::env;
 use std::fs;
 use std::io::stdout;
 use types::*;
-use utils::*;
 use vm::*;
 
 fn main() {
@@ -54,7 +52,7 @@ fn main() {
         ExternalFunction {
             args_t: vec![],
             ret_t: AstType::Float,
-            dispatch: |args: Vec<ExternalArg>| -> ExternalArg {
+            dispatch: |_: Vec<ExternalArg>| -> ExternalArg {
                 println!("called external function");
                 return ExternalArg::Float(123.345);
             },

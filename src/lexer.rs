@@ -39,7 +39,6 @@ pub enum TokenType {
 
     // Keywords
     And,
-    Class,
     Else,
     False,
     Fun,
@@ -48,8 +47,6 @@ pub enum TokenType {
     Or,
     Print,
     Return,
-    Super,
-    This,
     True,
     Var,
     While,
@@ -96,9 +93,6 @@ impl Lexer {
     pub fn peek(&self) -> Option<Token> {
         self.tokens.get(self.current + 1).cloned()
     }
-    pub fn peek_t(&self) -> Option<TokenType> {
-        self.peek().map(|t| t.t)
-    }
     pub fn next(&mut self) -> Option<Token> {
         match self.peek() {
             Some(t) => {
@@ -106,15 +100,6 @@ impl Lexer {
                 Some(t)
             }
             None => None,
-        }
-    }
-    pub fn next_t(&mut self) -> Option<TokenType> {
-        self.next().map(|t| t.t)
-    }
-    pub fn next_if(&mut self, p: fn(&TokenType) -> bool) -> Option<TokenType> {
-        match self.peek_t() {
-            Some(t) if p(&t) => self.next_t(),
-            _ => None,
         }
     }
 }
