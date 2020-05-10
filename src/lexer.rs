@@ -21,6 +21,7 @@ pub enum TokenType {
     Semicolon,
     Slash,
     Star,
+    Bar,
 
     // Two/prefixes
     Bang,
@@ -50,6 +51,7 @@ pub enum TokenType {
     True,
     Var,
     While,
+    Enum,
 
     TypeFloat,
     TypeBool,
@@ -127,6 +129,7 @@ pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
             '+' => (i, i + 1, TokenType::Plus),
             ';' => (i, i + 1, TokenType::Semicolon),
             '*' => (i, i + 1, TokenType::Star),
+            '|' => (i, i + 1, TokenType::Bar),
             '/' => {
                 if chars.peek().map(|(_, cl)| cl == &'/').unwrap_or(false) {
                     loop {
@@ -255,13 +258,14 @@ pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
                     "fun" => TokenType::Fun,
                     "for" => TokenType::For,
                     "if" => TokenType::If,
-                    "nil" => TokenType::TypeNil,
                     "or" => TokenType::Or,
                     "print" => TokenType::Print,
                     "return" => TokenType::Return,
                     "true" => TokenType::True,
                     "var" => TokenType::Var,
                     "while" => TokenType::While,
+                    "enum" => TokenType::Enum,
+                    "nil" => TokenType::TypeNil,
                     "float" => TokenType::TypeFloat,
                     "bool" => TokenType::TypeBool,
                     "str" => TokenType::TypeString,

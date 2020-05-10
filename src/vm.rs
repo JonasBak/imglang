@@ -128,18 +128,16 @@ impl<'a> VM<'a> {
                 OpCode::False => {
                     self.stack.push(false);
                 }
+                OpCode::PushU8 { data } => {
+                    self.stack.push(data);
+                }
                 OpCode::PushU16 { data } => {
                     self.stack.push(data);
                 }
                 OpCode::Pop => {
                     self.stack.0.pop();
                 }
-                OpCode::EqualU8 => {
-                    let r = self.stack.pop();
-                    let l = self.stack.pop();
-                    self.stack.push(l == r);
-                }
-                OpCode::EqualU64 => {
+                OpCode::Equal => {
                     let r = self.stack.pop();
                     let l = self.stack.pop();
                     self.stack.push(l == r);
@@ -247,6 +245,14 @@ impl<'a> VM<'a> {
                         ExternalArg::Nil => {}
                         _ => todo!(),
                     };
+                }
+                OpCode::EnumVariant => {
+                    let variant: u8 = self.stack.pop().into();
+                    let value = self.stack.pop();
+                    self.stack.push(match value {
+                        Value::Float(value) => Value::EnumFloat(variant, value),
+                        _ => todo!(),
+                    });
                 }
                 OpCode::IncreaseRC => {
                     let top = self.stack.len() - 1;

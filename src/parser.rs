@@ -31,6 +31,12 @@ pub enum Ast {
         ret_t: AstType,
         pos: usize,
     },
+    EnumDeclaration {
+        name: String,
+        variants: Vec<(String, AstType)>,
+        pos: usize,
+    },
+
     Variable {
         name: String,
         t: Option<AstType>,
@@ -349,6 +355,10 @@ fn declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
         TokenType::Fun => {
             lexer.next();
             func_declaration(lexer)
+        }
+        TokenType::Enum => {
+            lexer.next();
+            enum_declaration(lexer)
         }
         _ => statement(lexer),
     }
@@ -703,6 +713,49 @@ fn func_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
     };
 
     Ok(function)
+}
+
+fn enum_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
+    let name = match lexer.current_t() {
+        TokenType::Identifier(name) => name,
+        _ => {
+            return Err(ParserError::Unexpected(
+                lexer.current(),
+                "unexpected token when parsing enum, expected identifier",
+            ))
+        }
+    };
+    lexer.next();
+    consume(
+        lexer,
+        |t| t == &TokenType::Equal,
+        "expected '=' after enum name",
+    )?;
+    let mut variants = Vec::new();
+    while lexer.current_t() != TokenType::Semicolon {
+        let variant = match lexer.current_t() {
+            TokenType::Identifier(variant) => variant,
+            _ => {
+                return Err(ParserError::Unexpected(
+                    lexer.current(),
+                    "unexpected token when parsing enum variants, expected identifier",
+                ))
+            }
+        };
+        lexer.next();
+        let t = parse_type(lexer)?.unwrap_or(AstType::Nil);
+        variants.push((variant, t));
+        if lexer.current_t() == TokenType::Bar {
+            lexer.next();
+        }
+    }
+    lexer.next();
+    Ok(Ast::EnumDeclaration {
+        name,
+        variants,
+        pos,
+    })
 }
 
 fn return_statement(lexer: &mut Lexer) -> ParserResult<Ast> {

@@ -7,6 +7,7 @@ pub enum CallType {
     Function,
     Closure,
     External,
+    Enum,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -14,6 +15,9 @@ pub enum AstType {
     Function(Vec<AstType>, Box<AstType>),
     Closure(Vec<AstType>, Box<AstType>),
     ExternalFunction(Vec<AstType>, Box<AstType>),
+
+    Enum(String),
+    EnumVariant { enum_type: String, t: Box<AstType> },
 
     Float,
     Bool,
@@ -48,6 +52,7 @@ enum Variable {
     Local(LocalVariable),
     Global(AstType),
 }
+
 pub struct TypeChecker<'a> {
     variables: Vec<LocalVariable>,
     globals: HashMap<String, AstType>,
@@ -197,6 +202,37 @@ impl<'a> TypeChecker<'a> {
                 self.annotate_type(func)?.0;
                 (AstType::Nil, false)
             }
+            Ast::EnumDeclaration {
+                name,
+                variants,
+                pos,
+            } => {
+                if !(self.is_root && self.current_scope_depth == 0) {
+                    return Err(TypeError::Error(
+                        "enum declarations are only allowed at the top level".to_string(),
+                        *pos,
+                    ));
+                }
+                for var in variants.iter() {
+                    if self
+                        .globals
+                        .insert(
+                            var.0.clone(),
+                            AstType::EnumVariant {
+                                enum_type: name.clone(),
+                                t: Box::new(var.1.clone()),
+                            },
+                        )
+                        .is_some()
+                    {
+                        return Err(TypeError::Error(
+                            format!("name {} already in use", var.0),
+                            *pos,
+                        ));
+                    }
+                }
+                (AstType::Nil, false)
+            }
             Ast::Variable { name, t, pos } => {
                 let v = self.resolve_variable(name).ok_or(TypeError::Error(
                     format!("variable {} is not defined", name),
@@ -214,7 +250,12 @@ impl<'a> TypeChecker<'a> {
                         }
                         Variable::Global(global) => {
                             t.replace(global.clone());
-                            global.clone()
+                            match global {
+                                AstType::EnumVariant { enum_type, t } if *t == AstType::Nil => {
+                                    AstType::Enum(enum_type)
+                                }
+                                _ => global.clone(),
+                            }
                         }
                     },
                     false,
@@ -408,6 +449,10 @@ impl<'a> TypeChecker<'a> {
                         call_t.replace(CallType::External);
                         (a, r)
                     }
+                    AstType::EnumVariant { enum_type, t } => {
+                        call_t.replace(CallType::Enum);
+                        (vec![*t], Box::new(AstType::Enum(enum_type.clone())))
+                    }
                     t @ _ => {
                         return Err(TypeError::Error(format!("cannot call type {:?}", t), *pos))
                     }
@@ -477,9 +522,31 @@ impl<'a> TypeChecker<'a> {
                 t.replace(t_r.clone());
                 (t_r, false)
             }
-            Ast::Equal(l, r, t, pos)
-            | Ast::NotEqual(l, r, t, pos)
-            | Ast::Greater(l, r, t, pos)
+            Ast::Equal(l, r, t, pos) | Ast::NotEqual(l, r, t, pos) => {
+                let t_l = self.annotate_type(l)?.0;
+                let t_r = self.annotate_type(r)?.0;
+                if t_l != t_r {
+                    return Err(TypeError::Error(
+                        format!(
+                            "type of left operand ({:?}) doesn't match type of right ({:?})",
+                            t_l, t_r
+                        ),
+                        *pos,
+                    ));
+                }
+                if match t_l {
+                    AstType::Enum(..) | AstType::Bool | AstType::Float => false,
+                    _ => true,
+                } {
+                    return Err(TypeError::Error(
+                        format!("operation can't be preformed on type {:?}", t_l),
+                        *pos,
+                    ));
+                }
+                t.replace(t_r);
+                (AstType::Bool, false)
+            }
+            Ast::Greater(l, r, t, pos)
             | Ast::GreaterEqual(l, r, t, pos)
             | Ast::Lesser(l, r, t, pos)
             | Ast::LesserEqual(l, r, t, pos) => {

@@ -13,6 +13,7 @@ struct LocalVariable {
 enum GlobalVariable {
     Function(ChunkAdr),
     External(ExternalAdr),
+    EnumVariant(u8),
 }
 enum Variable {
     Local(LocalVariable),
@@ -78,6 +79,7 @@ impl<'a> Compiler<'a> {
             AstType::Bool
             | AstType::Function(..)
             | AstType::Float
+            | AstType::Enum(..)
             | AstType::ExternalFunction(..) => {
                 self.chunk().push_op(OpCode::Pop);
             }
@@ -86,6 +88,7 @@ impl<'a> Compiler<'a> {
                 self.chunk().push_op(OpCode::Pop);
             }
             AstType::Nil => {}
+            AstType::EnumVariant { .. } => todo!(),
         };
     }
     fn push_return(&mut self, expr: &Option<Box<Ast>>, t: &AstType) {
@@ -145,6 +148,8 @@ impl<'a> Compiler<'a> {
                     | AstType::Closure(..)
                     | AstType::HeapAllocated(_)
                     | AstType::Function(..)
+                    | AstType::Enum(..)
+                    | AstType::EnumVariant { .. }
                     | AstType::Nil => todo!(),
                     AstType::String => {
                         self.chunk().push_op(OpCode::PrintString);
@@ -166,15 +171,25 @@ impl<'a> Compiler<'a> {
                 self.codegen(func);
                 self.chunk().push_op(OpCode::Pop);
             }
+            Ast::EnumDeclaration { variants, .. } => {
+                for (i, var) in variants.iter().enumerate() {
+                    self.globals
+                        .insert(var.0.clone(), GlobalVariable::EnumVariant(i as u8));
+                }
+            }
             Ast::Variable { name, t, .. } => {
                 let v = self.resolve_variable(name).unwrap();
                 match v {
                     Variable::Local(v) => {
                         let is_rc = match t.as_ref().unwrap() {
-                            AstType::Bool | AstType::Function { .. } | AstType::Float => {
+                            AstType::Enum(..)
+                            | AstType::Bool
+                            | AstType::Function { .. }
+                            | AstType::Float => {
                                 self.chunk().push_op(OpCode::Variable { stack_i: v.offset });
                                 false
                             }
+                            AstType::EnumVariant { .. } => todo!(),
                             AstType::HeapAllocated(inner_t) => {
                                 match **inner_t {
                                     AstType::Float => self
@@ -203,6 +218,9 @@ impl<'a> Compiler<'a> {
                     Variable::Global(GlobalVariable::External(func_i)) => {
                         self.chunk().push_op(OpCode::PushU16 { data: func_i });
                     }
+                    Variable::Global(GlobalVariable::EnumVariant(variant)) => {
+                        self.chunk().push_op(OpCode::PushU8 { data: variant });
+                    }
                 }
             }
             Ast::Assign {
@@ -217,9 +235,13 @@ impl<'a> Compiler<'a> {
                 match v {
                     Variable::Local(v) => {
                         match t.as_ref().unwrap() {
-                            AstType::Bool | AstType::Function(..) | AstType::Float => {
+                            AstType::Enum(..)
+                            | AstType::Bool
+                            | AstType::Function(..)
+                            | AstType::Float => {
                                 self.chunk().push_op(OpCode::Assign { stack_i: v.offset })
                             }
+                            AstType::EnumVariant { .. } => panic!(),
                             AstType::HeapAllocated(inner_t) => {
                                 if move_to_heap.unwrap() {
                                     match **inner_t {
@@ -366,6 +388,7 @@ impl<'a> Compiler<'a> {
                     CallType::Function => self.chunk().push_op(OpCode::Call { args_width }),
                     CallType::Closure => self.chunk().push_op(OpCode::CallClosure { args_width }),
                     CallType::External => self.chunk().push_op(OpCode::CallExternal { args_width }),
+                    CallType::Enum => self.chunk().push_op(OpCode::EnumVariant),
                 };
             }
             Ast::Float(n, _) => {
@@ -414,8 +437,9 @@ impl<'a> Compiler<'a> {
                 self.codegen(l);
                 self.codegen(r);
                 match t.as_ref().unwrap() {
-                    AstType::Bool => self.chunk().push_op(OpCode::EqualU8),
-                    AstType::Float => self.chunk().push_op(OpCode::EqualU64),
+                    AstType::Enum(..) | AstType::Bool | AstType::Float => {
+                        self.chunk().push_op(OpCode::Equal)
+                    }
                     _ => todo!(),
                 };
             }
@@ -423,8 +447,9 @@ impl<'a> Compiler<'a> {
                 self.codegen(l);
                 self.codegen(r);
                 match t.as_ref().unwrap() {
-                    AstType::Bool => self.chunk().push_op(OpCode::EqualU8),
-                    AstType::Float => self.chunk().push_op(OpCode::EqualU64),
+                    AstType::Enum(..) | AstType::Bool | AstType::Float => {
+                        self.chunk().push_op(OpCode::Equal)
+                    }
                     _ => todo!(),
                 };
                 self.chunk().push_op(OpCode::Not);
