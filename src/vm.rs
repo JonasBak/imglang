@@ -169,17 +169,11 @@ impl<'a> VM<'a> {
                     self.heap.decrease_rc(old_val);
                     self.stack.set(Value::U32(new_val), stack_i + frame_offset);
                 }
-                OpCode::AssignHeapFloat { stack_i } => {
+                OpCode::AssignHeapified { stack_i } => {
                     let adr: HeapAdr = self.stack.get(stack_i + frame_offset).into();
                     let top = self.stack.len() - 1;
-                    let v = self.stack.get(top).into();
-                    self.heap.set_object(adr, Obj::Float(v));
-                }
-                OpCode::AssignHeapBool { stack_i } => {
-                    let adr: HeapAdr = self.stack.get(stack_i + frame_offset).into();
-                    let top = self.stack.len() - 1;
-                    let v = self.stack.get(top).into();
-                    self.heap.set_object(adr, Obj::Bool(v));
+                    let v = self.stack.get(top);
+                    self.heap.set_object(adr, Obj::Heapified(*v));
                 }
                 OpCode::JumpIfFalse { ip: jmp_ip } => {
                     let top = self.stack.len() - 1;
@@ -264,14 +258,8 @@ impl<'a> VM<'a> {
                     let v: HeapAdr = self.stack.get(top).into();
                     self.heap.decrease_rc(v);
                 }
-                OpCode::HeapifyFloat => {
-                    let n = self.stack.pop().into();
-                    let adr = self.heap.add_object(Obj::Float(n));
-                    self.stack.push(adr);
-                }
-                OpCode::HeapifyBool => {
-                    let b = self.stack.pop().into();
-                    let adr = self.heap.add_object(Obj::Bool(b));
+                OpCode::Heapify => {
+                    let adr = self.heap.add_object(Obj::Heapified(self.stack.pop()));
                     self.stack.push(adr);
                 }
                 OpCode::Closure {
@@ -290,14 +278,9 @@ impl<'a> VM<'a> {
                     }));
                     self.stack.push(adr);
                 }
-                OpCode::HeapFloat { stack_i } => {
+                OpCode::FromHeap { stack_i } => {
                     let adr: HeapAdr = self.stack.get(stack_i + frame_offset).into();
-                    let v = self.heap.get_float(adr);
-                    self.stack.push(v.unwrap());
-                }
-                OpCode::HeapBool { stack_i } => {
-                    let adr: HeapAdr = self.stack.get(stack_i + frame_offset).into();
-                    let v = self.heap.get_bool(adr);
+                    let v = self.heap.get_value(adr);
                     self.stack.push(v.unwrap());
                 }
             }

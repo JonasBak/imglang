@@ -25,8 +25,7 @@ pub enum OpCode {
     Variable { stack_i: StackAdr },
     Assign { stack_i: StackAdr },
     AssignObj { stack_i: StackAdr },
-    AssignHeapFloat { stack_i: StackAdr },
-    AssignHeapBool { stack_i: StackAdr },
+    AssignHeapified { stack_i: StackAdr },
     JumpIfFalse { ip: CodeAdr },
     Jump { ip: CodeAdr },
     Function { chunk_i: ChunkAdr },
@@ -36,11 +35,9 @@ pub enum OpCode {
     EnumVariant,
     IncreaseRC,
     DecreaseRC,
-    HeapifyFloat,
-    HeapifyBool,
+    Heapify,
     Closure { chunk_i: ChunkAdr, capture_len: u8 },
-    HeapFloat { stack_i: StackAdr },
-    HeapBool { stack_i: StackAdr },
+    FromHeap { stack_i: StackAdr },
 }
 
 pub type CodeAdr = u16;

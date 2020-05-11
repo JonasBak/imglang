@@ -139,7 +139,7 @@ fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool, msg: &'static str) -> P
     Ok(())
 }
 
-fn parse_type(lexer: &mut Lexer) -> ParserResult<Option<AstType>> {
+fn parse_type(lexer: &mut Lexer, default: &Option<AstType>) -> ParserResult<AstType> {
     let t = match lexer.current_t() {
         TokenType::TypeFloat => {
             lexer.next();
@@ -164,7 +164,7 @@ fn parse_type(lexer: &mut Lexer) -> ParserResult<Option<AstType>> {
                 TokenType::Semicolon | TokenType::Greater => false,
                 _ => true,
             } {
-                args.push(parse_type(lexer)?.unwrap());
+                args.push(parse_type(lexer, default)?);
                 if lexer.current_t() == TokenType::Comma {
                     lexer.next();
                 }
@@ -172,7 +172,7 @@ fn parse_type(lexer: &mut Lexer) -> ParserResult<Option<AstType>> {
 
             let ret_t = if lexer.current_t() == TokenType::Semicolon {
                 lexer.next();
-                parse_type(lexer)?.unwrap()
+                parse_type(lexer, default)?
             } else {
                 AstType::Nil
             };
@@ -189,9 +189,16 @@ fn parse_type(lexer: &mut Lexer) -> ParserResult<Option<AstType>> {
                 AstType::Function(args, Box::new(ret_t))
             }
         }
-        _ => return Ok(None),
+        TokenType::Identifier(t) => {
+            lexer.next();
+            AstType::Enum(t.clone())
+        }
+        _ => match default {
+            Some(t) => t.clone(),
+            None => return Err(ParserError::Unexpected(lexer.current(), "expected type")),
+        },
     };
-    return Ok(Some(t));
+    return Ok(t);
 }
 
 fn get_rule(t: &TokenType) -> Rule {
@@ -615,9 +622,7 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
         };
         lexer.next();
 
-        let arg_t = parse_type(lexer)?.ok_or_else(|| {
-            ParserError::Unexpected(lexer.current(), "expected type after argument")
-        })?;
+        let arg_t = parse_type(lexer, &None)?;
 
         args.push((arg, arg_t));
 
@@ -631,7 +636,7 @@ fn function(lexer: &mut Lexer) -> ParserResult<Ast> {
         |t| t == &TokenType::RightPar,
         "expected ')' after arguments",
     )?;
-    let ret_t = parse_type(lexer)?.unwrap_or(AstType::Nil);
+    let ret_t = parse_type(lexer, &Some(AstType::Nil))?;
     let body = if lexer.current_t() == TokenType::LeftBrace {
         statement(lexer)?
     } else {
@@ -744,7 +749,7 @@ fn enum_declaration(lexer: &mut Lexer) -> ParserResult<Ast> {
             }
         };
         lexer.next();
-        let t = parse_type(lexer)?.unwrap_or(AstType::Nil);
+        let t = parse_type(lexer, &Some(AstType::Nil))?;
         variants.push((variant, t));
         if lexer.current_t() == TokenType::Bar {
             lexer.next();

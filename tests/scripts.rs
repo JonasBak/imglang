@@ -67,6 +67,6 @@ fn closure_alternate() {
 }
 
 #[test]
-fn enum_comparison() {
-    test_script("tests/scripts/enum_comparison");
+fn test_enum() {
+    test_script("tests/scripts/enum");
 }

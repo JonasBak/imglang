@@ -9,9 +9,9 @@ pub struct Closure {
 }
 
 pub enum Obj {
+    Heapified(Value),
+
     String(String),
-    Float(f64),
-    Bool(bool),
 
     Closure(Closure),
 
@@ -112,16 +112,9 @@ impl Heap {
         })
     }
 
-    pub fn get_float(&self, i: HeapAdr) -> Option<f64> {
+    pub fn get_value(&self, i: HeapAdr) -> Option<Value> {
         self.get_object_ref(i).map(|obj| match obj {
-            Obj::Float(f) => *f,
-            _ => todo!(),
-        })
-    }
-
-    pub fn get_bool(&self, i: HeapAdr) -> Option<bool> {
-        self.get_object_ref(i).map(|obj| match obj {
-            Obj::Bool(b) => *b,
+            Obj::Heapified(v) => *v,
             _ => todo!(),
         })
     }

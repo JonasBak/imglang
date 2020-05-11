@@ -192,11 +192,8 @@ impl<'a> Compiler<'a> {
                             AstType::EnumVariant { .. } => todo!(),
                             AstType::HeapAllocated(inner_t) => {
                                 match **inner_t {
-                                    AstType::Float => self
-                                        .chunk()
-                                        .push_op(OpCode::HeapFloat { stack_i: v.offset }),
-                                    AstType::Bool => {
-                                        self.chunk().push_op(OpCode::HeapBool { stack_i: v.offset })
+                                    AstType::Float | AstType::Bool | AstType::Enum(..) => {
+                                        self.chunk().push_op(OpCode::FromHeap { stack_i: v.offset })
                                     }
                                     _ => todo!(),
                                 };
@@ -245,12 +242,9 @@ impl<'a> Compiler<'a> {
                             AstType::HeapAllocated(inner_t) => {
                                 if move_to_heap.unwrap() {
                                     match **inner_t {
-                                        AstType::Float => self
+                                        AstType::Float | AstType::Bool | AstType::Enum(..) => self
                                             .chunk()
-                                            .push_op(OpCode::AssignHeapFloat { stack_i: v.offset }),
-                                        AstType::Bool => self
-                                            .chunk()
-                                            .push_op(OpCode::AssignHeapBool { stack_i: v.offset }),
+                                            .push_op(OpCode::AssignHeapified { stack_i: v.offset }),
                                         _ => todo!(),
                                     }
                                 } else {
@@ -358,8 +352,9 @@ impl<'a> Compiler<'a> {
                             pos: *pos,
                         });
                         match var.1.as_ref().unwrap() {
-                            AstType::Float => self.chunk().push_op(OpCode::HeapifyFloat),
-                            AstType::Bool => self.chunk().push_op(OpCode::HeapifyBool),
+                            AstType::Float | AstType::Bool | AstType::Enum(..) => {
+                                self.chunk().push_op(OpCode::Heapify)
+                            }
                             _ => todo!(),
                         };
                     }

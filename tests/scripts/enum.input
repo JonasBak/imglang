@@ -1,0 +1,25 @@
+enum Test = Var0 | Var1 | Var2 float | Var3 float;
+
+print Var0 == Var0;
+print Var0 == Var1;
+print Var0 == Var2(1);
+print Var2(1) == Var2(1);
+print Var2(1) == Var2(2);
+print Var2(1) == Var3(1);
+print Var2(1) == Var3(2);
+
+enum State = first | second;
+var state = first;
+var something = fun[state](new State) {
+  if (state == first) {
+    print 1;
+  } else {
+    print 2;
+  }
+  state = new;
+};
+
+something(first);
+something(first);
+something(second);
+something(first);
