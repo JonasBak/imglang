@@ -1,8 +1,8 @@
 fun getAlternator(first float, second float) <;float>* {
-  var switch = false;
-  return fun[switch, first, second]() float {
-    switch = !switch;
-    if (switch) {
+  var doFirst = false;
+  return fun[doFirst, first, second]() float {
+    doFirst = !doFirst;
+    if (doFirst) {
       return first;
     } else {
       return second;
