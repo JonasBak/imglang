@@ -52,6 +52,7 @@ pub enum TokenType {
     Var,
     While,
     Enum,
+    Switch,
 
     TypeFloat,
     TypeBool,
@@ -265,6 +266,7 @@ pub fn scan(string: &String) -> LexerResult<Vec<Token>> {
                     "var" => TokenType::Var,
                     "while" => TokenType::While,
                     "enum" => TokenType::Enum,
+                    "switch" => TokenType::Switch,
                     "nil" => TokenType::TypeNil,
                     "float" => TokenType::TypeFloat,
                     "bool" => TokenType::TypeBool,

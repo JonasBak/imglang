@@ -50,6 +50,12 @@ pub enum Ast {
         pos: usize,
     },
 
+    Switch {
+        head: Box<Ast>,
+        cases: Vec<(Ast, Ast)>,
+        default: Option<Box<Ast>>,
+        pos: usize,
+    },
     If {
         condition: Box<Ast>,
         body: Box<Ast>,
@@ -464,6 +470,10 @@ fn statement(lexer: &mut Lexer) -> ParserResult<Ast> {
             lexer.next();
             return_statement(lexer)
         }
+        TokenType::Switch => {
+            lexer.next();
+            switch_statement(lexer)
+        }
         _ => expression_statement(lexer),
     }
 }
@@ -504,6 +514,64 @@ fn if_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
         condition: Box::new(expr),
         body: Box::new(stmt),
         else_body: else_stmt,
+        pos,
+    })
+}
+
+fn switch_statement(lexer: &mut Lexer) -> ParserResult<Ast> {
+    let pos = lexer.prev().unwrap().start;
+    consume(
+        lexer,
+        |t| t == &TokenType::LeftPar,
+        "expected '(' after switch keyword",
+    )?;
+    let head = expression(lexer)?;
+    consume(
+        lexer,
+        |t| t == &TokenType::RightPar,
+        "expected ')' after switch expression",
+    )?;
+    consume(
+        lexer,
+        |t| t == &TokenType::LeftBrace,
+        "expected '{' before switch cases",
+    )?;
+    let mut cases = Vec::new();
+    let mut default = None;
+    while lexer.current_t() != TokenType::RightBrace {
+        match lexer.current_t() {
+            TokenType::Star => {
+                lexer.next();
+                consume(
+                    lexer,
+                    |t| t == &TokenType::LeftBrace,
+                    "expected '{' before case body",
+                )?;
+                default.replace(Box::new(block(lexer)?));
+            }
+            _ => {
+                lexer.next();
+                let case = literal(lexer)?;
+                consume(
+                    lexer,
+                    |t| t == &TokenType::LeftBrace,
+                    "expected '{' before case body",
+                )?;
+                let body = block(lexer)?;
+                cases.push((case, body));
+            }
+        }
+    }
+    consume(
+        lexer,
+        |t| t == &TokenType::RightBrace,
+        "expected '}' after switch cases",
+    )?;
+
+    Ok(Ast::Switch {
+        head: Box::new(head),
+        cases,
+        default,
         pos,
     })
 }

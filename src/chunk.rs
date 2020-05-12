@@ -28,6 +28,7 @@ pub enum OpCode {
     AssignHeapified { stack_i: StackAdr },
     JumpIfFalse { ip: CodeAdr },
     Jump { ip: CodeAdr },
+    SwitchJump { ip: CodeAdr },
     Function { chunk_i: ChunkAdr },
     Call { args_width: u8 },
     CallClosure { args_width: u8 },
@@ -88,6 +89,9 @@ impl Chunk {
                 *ip = top;
             }
             OpCode::JumpIfFalse { ref mut ip } => {
+                *ip = top;
+            }
+            OpCode::SwitchJump { ref mut ip } => {
                 *ip = top;
             }
             _ => panic!(),

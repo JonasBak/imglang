@@ -261,6 +261,35 @@ impl<'a> Compiler<'a> {
                     _ => panic!(),
                 }
             }
+            Ast::Switch {
+                head,
+                cases,
+                default,
+                ..
+            } => {
+                // TODO create jump table and place in chunk
+                self.codegen(head);
+                let mut jumps = Vec::new();
+                for (case, _) in cases.iter() {
+                    self.codegen(case);
+                    jumps.push(self.chunk().push_op(OpCode::SwitchJump { ip: 0 }));
+                }
+                self.chunk().push_op(OpCode::Pop);
+                jumps.push(self.chunk().push_op(OpCode::Jump { ip: 0 }));
+                for (i, (_, body)) in cases.iter().enumerate() {
+                    self.chunk().backpatch_jump(jumps[i]);
+                    self.chunk().push_op(OpCode::Pop);
+                    self.codegen(body);
+                    jumps[i] = self.chunk().push_op(OpCode::Jump { ip: 0 });
+                }
+                self.chunk().backpatch_jump(*jumps.last().unwrap());
+                if let Some(default) = default {
+                    self.codegen(default);
+                }
+                for (i, _) in cases.iter().enumerate() {
+                    self.chunk().backpatch_jump(jumps[i]);
+                }
+            }
             Ast::If {
                 condition,
                 body,

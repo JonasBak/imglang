@@ -183,6 +183,14 @@ impl<'a> VM<'a> {
                     }
                 }
                 OpCode::Jump { ip: jmp_ip } => ip = jmp_ip,
+                OpCode::SwitchJump { ip: jmp_ip } => {
+                    let compare = self.stack.pop();
+                    let top = self.stack.len() - 1;
+                    let switch_value = self.stack.get(top);
+                    if compare == *switch_value {
+                        ip = jmp_ip;
+                    }
+                }
                 OpCode::Function { chunk_i } => {
                     self.stack.push(chunk_i);
                 }

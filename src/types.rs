@@ -301,14 +301,46 @@ impl<'a> TypeChecker<'a> {
                 t.replace(v_t);
                 (expr_t, false)
             }
+            Ast::Switch {
+                head,
+                cases,
+                default,
+                pos,
+            } => {
+                let switch_t = self.annotate_type(head)?.0;
+                if switch_t == AstType::Nil {
+                    return Err(TypeError::Error(
+                        "switch value cannot be nil".to_string(),
+                        *pos,
+                    ));
+                }
+                let mut diverges = if let Some(default) = default {
+                    self.annotate_type(default)?.1
+                } else {
+                    false
+                };
+                for (case, body) in cases.iter_mut() {
+                    let t = self.annotate_type(case)?.0;
+                    if t != switch_t {
+                        return Err(TypeError::Error(
+                            format!(
+                                "expected switch case to be type {:?}, but found type {:?}",
+                                switch_t, t
+                            ),
+                            *pos,
+                        ));
+                    }
+                    diverges = self.annotate_type(body)?.1 && diverges;
+                }
+                (AstType::Nil, diverges)
+            }
             Ast::If {
                 condition,
                 body,
                 else_body,
                 pos,
             } => {
-                let condition_t = self.annotate_type(condition)?.0;
-                if condition_t != AstType::Bool {
+                if self.annotate_type(condition)?.0 != AstType::Bool {
                     return Err(TypeError::Error(
                         "condition must be a bool".to_string(),
                         *pos,
@@ -327,8 +359,7 @@ impl<'a> TypeChecker<'a> {
                 body,
                 pos,
             } => {
-                let condition_t = self.annotate_type(condition)?.0;
-                if condition_t != AstType::Bool {
+                if self.annotate_type(condition)?.0 != AstType::Bool {
                     return Err(TypeError::Error(
                         "condition must be a bool".to_string(),
                         *pos,
