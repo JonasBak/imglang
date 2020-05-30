@@ -9,7 +9,7 @@ pub struct Closure {
 }
 
 pub enum Obj {
-    Heapified(Value),
+    Heapified(Box<[u8]>),
 
     String(String),
 
@@ -112,9 +112,11 @@ impl Heap {
         })
     }
 
-    pub fn get_value(&self, i: HeapAdr) -> Option<Value> {
+    pub fn get_value<T: ByteCodec>(&self, i: HeapAdr) -> Option<T> {
         self.get_object_ref(i).map(|obj| match obj {
-            Obj::Heapified(v) => *v,
+            Obj::Heapified(v) => {
+                todo!();
+            }
             _ => todo!(),
         })
     }

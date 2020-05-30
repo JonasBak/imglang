@@ -65,7 +65,7 @@ impl Externals {
         for arg_t in func.args_t.iter() {
             args.push(match arg_t {
                 AstType::Float => {
-                    let f = stack.get(offset).into();
+                    let f: f64 = stack.get(offset);
                     ExternalArg::Float(f)
                 }
                 _ => todo!(),

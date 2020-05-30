@@ -1,71 +1,75 @@
-macro_rules! impl_from {
-    ($t:ident, $variant:ident) => {
-        impl From<Value> for $t {
-            fn from(val: Value) -> Self {
-                match val {
-                    Value::$variant(v) => v,
-                    _ => panic!(),
+use std::mem;
+
+pub type StackAdr = u16;
+
+#[derive(Debug)]
+pub struct Stack(pub Box<[u8]>, pub usize);
+
+impl Stack {
+    pub fn new() -> Stack {
+        Stack(Box::new([0; 1 << 8]), 0)
+    }
+    pub fn reserved(&mut self, width: usize) {
+        if self.1 + width >= self.0.len() {
+            let mut new = vec![0; self.0.len() << 1];
+            new[..self.0.len()].copy_from_slice(&self.0[..]);
+            self.0 = new.into_boxed_slice();
+        }
+    }
+    pub fn truncate(&mut self, new_size: StackAdr) {
+        self.1 = new_size as usize;
+    }
+    pub fn push<T: ByteCodec>(&mut self, v: T) -> StackAdr {
+        self.reserved(T::width());
+        let l = self.1;
+        self.1 += T::width();
+        v.set(&mut self.0[l] as *mut u8);
+        l as StackAdr
+    }
+    pub fn pop<T: ByteCodec>(&mut self) -> T {
+        self.1 -= T::width();
+        T::get(&self.0[self.1] as *const u8)
+    }
+    pub fn get<T: ByteCodec>(&self, i: StackAdr) -> T {
+        T::get(&self.0[i as usize] as *const u8)
+    }
+    pub fn set<T: ByteCodec>(&mut self, val: T, i: StackAdr) {
+        val.set(&mut self.0[i as usize] as *mut u8);
+    }
+    pub fn len(&self) -> StackAdr {
+        self.1 as StackAdr
+    }
+}
+
+pub trait ByteCodec {
+    fn width() -> usize;
+    fn set(self, ptr: *mut u8);
+    fn get(ptr: *const u8) -> Self;
+}
+
+macro_rules! impl_codec_default {
+    ($t:ident) => {
+        impl ByteCodec for $t {
+            fn width() -> usize {
+                mem::size_of::<$t>()
+            }
+            fn set(self, ptr: *mut u8) {
+                let ptr: *mut $t = ptr.cast();
+                unsafe {
+                    *ptr = self;
                 }
             }
-        }
-        impl From<&Value> for $t {
-            fn from(val: &Value) -> Self {
-                match val {
-                    Value::$variant(v) => *v,
-                    _ => panic!(),
-                }
-            }
-        }
-        impl From<$t> for Value {
-            fn from(v: $t) -> Self {
-                Value::$variant(v)
+            fn get(ptr: *const u8) -> Self {
+                let ptr: *const $t = ptr.cast();
+                unsafe { *ptr }
             }
         }
     };
 }
 
-pub type StackAdr = u16;
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Value {
-    Float(f64),
-    Bool(bool),
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-
-    EnumFloat(u8, f64),
-}
-
-#[derive(Debug)]
-pub struct Stack(pub Vec<Value>);
-
-impl Stack {
-    pub fn new() -> Stack {
-        Stack(Vec::new())
-    }
-    pub fn push<T: Into<Value>>(&mut self, v: T) -> StackAdr {
-        self.0.push(v.into());
-        self.0.len() as StackAdr - 1
-    }
-    pub fn pop(&mut self) -> Value {
-        self.0.pop().unwrap()
-    }
-    pub fn get(&self, i: StackAdr) -> &Value {
-        &self.0[i as usize]
-    }
-    pub fn set(&mut self, val: Value, i: StackAdr) {
-        self.0[i as usize] = val;
-    }
-    pub fn len(&self) -> StackAdr {
-        self.0.len() as StackAdr
-    }
-}
-
-impl_from!(f64, Float);
-impl_from!(bool, Bool);
-impl_from!(u8, U8);
-impl_from!(u16, U16);
-impl_from!(u32, U32);
-impl_from!(u64, U64);
+impl_codec_default!(f64);
+impl_codec_default!(bool);
+impl_codec_default!(u8);
+impl_codec_default!(u16);
+impl_codec_default!(u32);
+impl_codec_default!(u64);

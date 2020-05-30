@@ -8,8 +8,8 @@ macro_rules! expr {
 }
 macro_rules! binary_op_f64{
     ($vm:ident, $op:tt) => {{
-        let r: f64 = $vm.stack.pop().into();
-        let l: f64 = $vm.stack.pop().into();
+        let r: f64 = $vm.stack.pop();
+        let l: f64 = $vm.stack.pop();
         $vm.stack.push(expr!(l $op r));
     }}
 }
@@ -20,6 +20,7 @@ struct CallFrame {
     parent_ip: CodeAdr,
     parent_chunk: ChunkAdr,
     parent_frame_offset: StackAdr,
+    args_width: u8,
 }
 
 pub struct VM<'a> {
@@ -72,15 +73,17 @@ impl<'a> VM<'a> {
                         parent_ip,
                         parent_chunk,
                         parent_frame_offset,
-                        ..
+                        args_width,
                     } = self.call_frames.pop().unwrap();
 
                     if return_value {
-                        let ret_val = self.stack.pop();
-                        self.stack.0.truncate(frame_offset as usize);
-                        self.stack.push(ret_val);
+                        self.stack.truncate(frame_offset + args_width as StackAdr);
+                        let i = frame_offset as usize + args_width as usize;
+                        self.stack
+                            .0
+                            .copy_within(i.., self.stack.1 - args_width as usize);
                     } else {
-                        self.stack.0.truncate(frame_offset as usize);
+                        self.stack.truncate(frame_offset);
                     }
 
                     ip = parent_ip;
@@ -88,15 +91,15 @@ impl<'a> VM<'a> {
                     frame_offset = parent_frame_offset;
                 }
                 OpCode::PrintF64 => {
-                    let a: f64 = self.stack.pop().into();
+                    let a: f64 = self.stack.pop();
                     writeln!(out, "{:?}", a).unwrap();
                 }
                 OpCode::PrintBool => {
-                    let a: bool = self.stack.pop().into();
+                    let a: bool = self.stack.pop();
                     writeln!(out, "{:?}", a).unwrap();
                 }
                 OpCode::PrintString => {
-                    let a = self.stack.pop().into();
+                    let a: u32 = self.stack.pop();
                     let string = self.heap.get_string_ref(a).unwrap();
                     writeln!(out, "{}", string).unwrap();
                     self.heap.decrease_rc(a);
@@ -111,11 +114,11 @@ impl<'a> VM<'a> {
                     self.stack.push(adr);
                 }
                 OpCode::NegateF64 => {
-                    let a: f64 = self.stack.pop().into();
+                    let a: f64 = self.stack.pop();
                     self.stack.push(-a);
                 }
                 OpCode::Not => {
-                    let a: bool = self.stack.pop().into();
+                    let a: bool = self.stack.pop();
                     self.stack.push(!a);
                 }
                 OpCode::MultiplyF64 => binary_op_f64!(self, *),
@@ -134,60 +137,68 @@ impl<'a> VM<'a> {
                 OpCode::PushU16 { data } => {
                     self.stack.push(data);
                 }
-                OpCode::Pop => {
-                    self.stack.0.pop();
+                OpCode::Pop { width } => {
+                    let new_top = self.stack.1 - width as usize;
+                    self.stack.truncate(new_top as StackAdr);
                 }
                 OpCode::Equal => {
-                    let r = self.stack.pop();
-                    let l = self.stack.pop();
+                    todo!();
+                    let r: f64 = self.stack.pop();
+                    let l: f64 = self.stack.pop();
                     self.stack.push(l == r);
                 }
                 OpCode::GreaterF64 => {
-                    let r: f64 = self.stack.pop().into();
-                    let l: f64 = self.stack.pop().into();
+                    let r: f64 = self.stack.pop();
+                    let l: f64 = self.stack.pop();
                     self.stack.push(l > r);
                 }
                 OpCode::LesserF64 => {
-                    let r: f64 = self.stack.pop().into();
-                    let l: f64 = self.stack.pop().into();
+                    let r: f64 = self.stack.pop();
+                    let l: f64 = self.stack.pop();
                     self.stack.push(l < r);
                 }
-                OpCode::Variable { stack_i } => {
-                    let v = *self.stack.get(stack_i + frame_offset);
-                    self.stack.push(v);
+                OpCode::Variable { stack_i, width } => {
+                    let top = self.stack.1;
+                    let i = stack_i as usize + frame_offset as usize;
+                    self.stack.reserved(width as usize);
+                    self.stack.0.copy_within(i..i + width as usize, top);
+                    self.stack.1 = top + width as usize;
                 }
                 OpCode::Assign { stack_i } => {
+                    todo!();
                     let top = self.stack.len() - 1;
-                    let v = *self.stack.get(top);
+                    let v: u64 = self.stack.get(top);
                     self.stack.set(v, stack_i + frame_offset);
                 }
                 OpCode::AssignObj { stack_i } => {
                     let top = self.stack.len() - 1;
-                    let new_val: HeapAdr = self.stack.get(top).into();
-                    let old_val: HeapAdr = self.stack.get(stack_i + frame_offset).into();
+                    let new_val: HeapAdr = self.stack.get(top);
+                    let old_val: HeapAdr = self.stack.get(stack_i + frame_offset);
                     self.heap.increase_rc(new_val);
                     self.heap.decrease_rc(old_val);
-                    self.stack.set(Value::U32(new_val), stack_i + frame_offset);
+                    self.stack.set(new_val, stack_i + frame_offset);
                 }
                 OpCode::AssignHeapified { stack_i } => {
-                    let adr: HeapAdr = self.stack.get(stack_i + frame_offset).into();
-                    let top = self.stack.len() - 1;
-                    let v = self.stack.get(top);
-                    self.heap.set_object(adr, Obj::Heapified(*v));
+                    todo!();
+                    // let adr: HeapAdr = self.stack.get(stack_i + frame_offset);
+                    // let top = self.stack.len() - 1;
+                    // let v = self.stack.get(top);
+                    // self.heap.set_object(adr, Obj::Heapified(*v));
                 }
                 OpCode::JumpIfFalse { ip: jmp_ip } => {
                     let top = self.stack.len() - 1;
-                    let v: bool = self.stack.get(top).into();
+                    let v: bool = self.stack.get(top);
                     if !v {
                         ip = jmp_ip;
                     }
                 }
                 OpCode::Jump { ip: jmp_ip } => ip = jmp_ip,
                 OpCode::SwitchJump { ip: jmp_ip } => {
-                    let compare = self.stack.pop();
+                    todo!();
+                    let compare: u64 = self.stack.pop();
                     let top = self.stack.len() - 1;
-                    let switch_value = self.stack.get(top);
-                    if compare == *switch_value {
+                    let switch_value: u64 = self.stack.get(top);
+                    if compare == switch_value {
                         ip = jmp_ip;
                     }
                 }
@@ -195,19 +206,20 @@ impl<'a> VM<'a> {
                     self.stack.push(chunk_i);
                 }
                 OpCode::Call { args_width } => {
-                    let chunk_i: ChunkAdr = self.stack.pop().into();
+                    let chunk_i: ChunkAdr = self.stack.pop();
 
                     self.call_frames.push(CallFrame {
                         parent_ip: ip,
                         parent_chunk: current_chunk,
                         parent_frame_offset: frame_offset,
+                        args_width,
                     });
                     current_chunk = chunk_i;
                     ip = 0;
                     frame_offset = self.stack.len() - args_width as StackAdr;
                 }
                 OpCode::CallClosure { args_width } => {
-                    let closure_adr: HeapAdr = self.stack.pop().into();
+                    let closure_adr: HeapAdr = self.stack.pop();
 
                     let closure = self.heap.get_closure_ref(closure_adr).unwrap();
                     let args_width = args_width + closure.captured.len() as u8;
@@ -220,6 +232,7 @@ impl<'a> VM<'a> {
                         parent_ip: ip,
                         parent_chunk: current_chunk,
                         parent_frame_offset: frame_offset,
+                        args_width,
                     });
                     current_chunk = closure.function;
                     ip = 0;
@@ -232,14 +245,14 @@ impl<'a> VM<'a> {
                     }
                 }
                 OpCode::CallExternal { args_width } => {
-                    let func_i: ExternalAdr = self.stack.pop().into();
+                    let func_i: ExternalAdr = self.stack.pop();
 
                     let offset = self.stack.len() - args_width as StackAdr;
                     let ret = self
                         .externals
                         .unwrap()
                         .dispatch(func_i, &mut self.stack, offset);
-                    self.stack.0.truncate(offset as usize);
+                    self.stack.truncate(offset);
                     match ret {
                         ExternalArg::Float(f) => {
                             self.stack.push(f);
@@ -249,26 +262,28 @@ impl<'a> VM<'a> {
                     };
                 }
                 OpCode::EnumVariant => {
-                    let variant: u8 = self.stack.pop().into();
-                    let value = self.stack.pop();
-                    self.stack.push(match value {
-                        Value::Float(value) => Value::EnumFloat(variant, value),
-                        _ => todo!(),
-                    });
+                    todo!();
+                    // let variant: u8 = self.stack.pop();
+                    // let value = self.stack.pop();
+                    // self.stack.push(match value {
+                    //     Value::Float(value) => Value::EnumFloat(variant, value),
+                    //     _ => todo!(),
+                    // });
                 }
                 OpCode::IncreaseRC => {
                     let top = self.stack.len() - 1;
-                    let v: HeapAdr = self.stack.get(top).into();
+                    let v: HeapAdr = self.stack.get(top);
                     self.heap.increase_rc(v);
                 }
                 OpCode::DecreaseRC => {
                     let top = self.stack.len() - 1;
-                    let v: HeapAdr = self.stack.get(top).into();
+                    let v: HeapAdr = self.stack.get(top);
                     self.heap.decrease_rc(v);
                 }
                 OpCode::Heapify => {
-                    let adr = self.heap.add_object(Obj::Heapified(self.stack.pop()));
-                    self.stack.push(adr);
+                    todo!();
+                    // let adr = self.heap.add_object(Obj::Heapified(self.stack.pop()));
+                    // self.stack.push(adr);
                 }
                 OpCode::Closure {
                     chunk_i,
@@ -276,7 +291,7 @@ impl<'a> VM<'a> {
                 } => {
                     let mut captured = Vec::new();
                     for _ in 0..capture_len {
-                        captured.push(self.stack.pop().into());
+                        captured.push(self.stack.pop());
                     }
                     captured = captured.into_iter().rev().collect();
 
@@ -287,9 +302,10 @@ impl<'a> VM<'a> {
                     self.stack.push(adr);
                 }
                 OpCode::FromHeap { stack_i } => {
-                    let adr: HeapAdr = self.stack.get(stack_i + frame_offset).into();
-                    let v = self.heap.get_value(adr);
-                    self.stack.push(v.unwrap());
+                    todo!();
+                    // let adr: HeapAdr = self.stack.get(stack_i + frame_offset);
+                    // let v = self.heap.get_value(adr);
+                    // self.stack.push(v.unwrap());
                 }
             }
         }

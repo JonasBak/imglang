@@ -34,6 +34,17 @@ impl AstType {
             _ => false,
         }
     }
+    pub fn width(&self) -> usize {
+        match self {
+            AstType::Bool => bool::width(),
+            AstType::Function(..) => ChunkAdr::width(),
+            AstType::Float => f64::width(),
+            AstType::Enum(..) => u8::width(),
+            AstType::ExternalFunction(..) => ExternalAdr::width(),
+            AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => HeapAdr::width(),
+            AstType::Nil | AstType::EnumVariant { .. } => panic!(),
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
@@ -497,7 +508,7 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
-                args_width.replace(args_t.len() as u8);
+                args_width.replace(args_t.iter().map(|t| t.width()).sum::<usize>() as u8);
                 (*ret_t.clone(), false)
             }
             Ast::Float(_, _) => (AstType::Float, false),
