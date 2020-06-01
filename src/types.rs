@@ -39,10 +39,11 @@ impl AstType {
             AstType::Bool => bool::width(),
             AstType::Function(..) => ChunkAdr::width(),
             AstType::Float => f64::width(),
-            AstType::Enum(..) => u8::width(),
+            AstType::Enum(..) => todo!(),
             AstType::ExternalFunction(..) => ExternalAdr::width(),
             AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => HeapAdr::width(),
-            AstType::Nil | AstType::EnumVariant { .. } => panic!(),
+            AstType::Nil => 0,
+            AstType::EnumVariant { .. } => panic!(),
         }
     }
 }

@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OpCode {
-    Return { return_value: bool },
+    Return { width: u8 },
     ConstantF64 { data_i: DataAdr },
     ConstantString { data_i: DataAdr },
     NegateF64,
@@ -16,14 +16,14 @@ pub enum OpCode {
     PushU16 { data: u16 },
     Pop { width: u8 },
     Not,
-    Equal,
+    Equal { width: u8 },
     GreaterF64,
     LesserF64,
     PrintF64,
     PrintBool,
     PrintString,
     Variable { stack_i: StackAdr, width: u8 },
-    Assign { stack_i: StackAdr },
+    Assign { stack_i: StackAdr, width: u8 },
     AssignObj { stack_i: StackAdr },
     AssignHeapified { stack_i: StackAdr },
     JumpIfFalse { ip: CodeAdr },
@@ -36,7 +36,7 @@ pub enum OpCode {
     EnumVariant,
     IncreaseRC,
     DecreaseRC,
-    Heapify,
+    Heapify { width: u8 },
     Closure { chunk_i: ChunkAdr, capture_len: u8 },
     FromHeap { stack_i: StackAdr },
 }

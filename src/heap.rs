@@ -3,11 +3,13 @@ use std::mem;
 
 pub type HeapAdr = u32;
 
+#[derive(Debug)]
 pub struct Closure {
     pub function: ChunkAdr,
     pub captured: Vec<HeapAdr>,
 }
 
+#[derive(Debug)]
 pub enum Obj {
     Heapified(Box<[u8]>),
 
@@ -98,6 +100,10 @@ impl Heap {
         self.objects.get(i as usize).map(|obj| &obj.1)
     }
 
+    pub fn get_object_ref_mut(&self, i: HeapAdr) -> Option<&Obj> {
+        self.objects.get(i as usize).map(|obj| &obj.1)
+    }
+
     pub fn get_string_ref(&self, i: HeapAdr) -> Option<&String> {
         self.get_object_ref(i).map(|obj| match obj {
             Obj::String(s) => s,
@@ -112,12 +118,12 @@ impl Heap {
         })
     }
 
-    pub fn get_value<T: ByteCodec>(&self, i: HeapAdr) -> Option<T> {
-        self.get_object_ref(i).map(|obj| match obj {
-            Obj::Heapified(v) => {
-                todo!();
-            }
-            _ => todo!(),
-        })
+    pub fn get_value(&mut self, i: HeapAdr) -> Option<&mut Box<[u8]>> {
+        self.objects
+            .get_mut(i as usize)
+            .map(|obj| match &mut obj.1 {
+                Obj::Heapified(v) => v,
+                _ => todo!(),
+            })
     }
 }
