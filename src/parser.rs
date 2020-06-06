@@ -9,43 +9,43 @@ pub enum Ast {
     },
     Print {
         expr: Box<Ast>,
-        t: Option<AstType>,
+        t: Option<Type>,
         pos: usize,
     },
     Return {
         expr: Option<Box<Ast>>,
-        t: Option<AstType>,
+        t: Option<Type>,
         pos: usize,
     },
 
     Declaration {
         name: String,
         expr: Box<Ast>,
-        t: Option<AstType>,
+        t: Option<Type>,
         pos: usize,
     },
     FuncDeclaration {
         name: String,
         func: Box<Ast>,
-        args_t: Vec<AstType>,
-        ret_t: AstType,
+        args_t: Vec<Type>,
+        ret_t: Type,
         pos: usize,
     },
     EnumDeclaration {
         name: String,
-        variants: Vec<(String, AstType)>,
+        variants: Vec<(String, Type)>,
         pos: usize,
     },
 
     Variable {
         name: String,
-        t: Option<AstType>,
+        t: Option<Type>,
         pos: usize,
     },
     Assign {
         name: String,
         expr: Box<Ast>,
-        t: Option<AstType>,
+        t: Option<Type>,
         move_to_heap: Option<bool>,
         pos: usize,
     },
@@ -70,15 +70,15 @@ pub enum Ast {
 
     ExprStatement {
         expr: Box<Ast>,
-        t: Option<AstType>,
+        t: Option<Type>,
         pos: usize,
     },
 
     Function {
         body: Box<Ast>,
-        args: Vec<(String, AstType)>,
-        captured: Vec<(String, Option<AstType>)>,
-        ret_t: AstType,
+        args: Vec<(String, Type)>,
+        captured: Vec<(String, Option<Type>)>,
+        ret_t: Type,
         pos: usize,
     },
     Call {
@@ -97,17 +97,17 @@ pub enum Ast {
     Negate(Box<Ast>, usize),
     Not(Box<Ast>, usize),
 
-    Multiply(Box<Ast>, Box<Ast>, Option<AstType>, usize),
-    Divide(Box<Ast>, Box<Ast>, Option<AstType>, usize),
-    Add(Box<Ast>, Box<Ast>, Option<AstType>, usize),
-    Sub(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    Multiply(Box<Ast>, Box<Ast>, Option<Type>, usize),
+    Divide(Box<Ast>, Box<Ast>, Option<Type>, usize),
+    Add(Box<Ast>, Box<Ast>, Option<Type>, usize),
+    Sub(Box<Ast>, Box<Ast>, Option<Type>, usize),
 
-    Equal(Box<Ast>, Box<Ast>, Option<AstType>, usize),
-    NotEqual(Box<Ast>, Box<Ast>, Option<AstType>, usize),
-    Greater(Box<Ast>, Box<Ast>, Option<AstType>, usize),
-    GreaterEqual(Box<Ast>, Box<Ast>, Option<AstType>, usize),
-    Lesser(Box<Ast>, Box<Ast>, Option<AstType>, usize),
-    LesserEqual(Box<Ast>, Box<Ast>, Option<AstType>, usize),
+    Equal(Box<Ast>, Box<Ast>, Option<Type>, usize),
+    NotEqual(Box<Ast>, Box<Ast>, Option<Type>, usize),
+    Greater(Box<Ast>, Box<Ast>, Option<Type>, usize),
+    GreaterEqual(Box<Ast>, Box<Ast>, Option<Type>, usize),
+    Lesser(Box<Ast>, Box<Ast>, Option<Type>, usize),
+    LesserEqual(Box<Ast>, Box<Ast>, Option<Type>, usize),
 
     And(Box<Ast>, Box<Ast>, usize),
     Or(Box<Ast>, Box<Ast>, usize),
@@ -145,23 +145,23 @@ fn consume(lexer: &mut Lexer, p: fn(&TokenType) -> bool, msg: &'static str) -> P
     Ok(())
 }
 
-fn parse_type(lexer: &mut Lexer, default: &Option<AstType>) -> ParserResult<AstType> {
+fn parse_type(lexer: &mut Lexer, default: &Option<AstType>) -> ParserResult<Type> {
     let t = match lexer.current_t() {
         TokenType::TypeFloat => {
             lexer.next();
-            AstType::Float
+            Type::Resolved(AstType::Float)
         }
         TokenType::TypeBool => {
             lexer.next();
-            AstType::Bool
+            Type::Resolved(AstType::Bool)
         }
         TokenType::TypeString => {
             lexer.next();
-            AstType::String
+            Type::Resolved(AstType::String)
         }
         TokenType::TypeNil => {
             lexer.next();
-            AstType::Nil
+            Type::Resolved(AstType::Nil)
         }
         TokenType::Lesser => {
             lexer.next();
@@ -180,7 +180,7 @@ fn parse_type(lexer: &mut Lexer, default: &Option<AstType>) -> ParserResult<AstT
                 lexer.next();
                 parse_type(lexer, default)?
             } else {
-                AstType::Nil
+                Type::Resolved(AstType::Nil)
             };
 
             consume(
@@ -190,17 +190,17 @@ fn parse_type(lexer: &mut Lexer, default: &Option<AstType>) -> ParserResult<AstT
             )?;
             if lexer.current_t() == TokenType::Star {
                 lexer.next();
-                AstType::Closure(args, Box::new(ret_t))
+                Type::Resolved(AstType::Closure(args, Box::new(ret_t)))
             } else {
-                AstType::Function(args, Box::new(ret_t))
+                Type::Resolved(AstType::Function(args, Box::new(ret_t)))
             }
         }
         TokenType::Identifier(t) => {
             lexer.next();
-            AstType::Enum(t.clone())
+            Type::Unresolved(t.clone())
         }
         _ => match default {
-            Some(t) => t.clone(),
+            Some(t) => Type::Resolved(t.clone()),
             None => return Err(ParserError::Unexpected(lexer.current(), "expected type")),
         },
     };

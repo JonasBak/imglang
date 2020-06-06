@@ -11,13 +11,33 @@ pub enum CallType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum AstType {
-    Function(Vec<AstType>, Box<AstType>),
-    Closure(Vec<AstType>, Box<AstType>),
-    ExternalFunction(Vec<AstType>, Box<AstType>),
+pub enum Type {
+    Resolved(AstType),
+    Unresolved(String),
+}
+impl Type {
+    pub fn resolve(&mut self, t: AstType) {
+        *self = Type::Resolved(t);
+    }
+    pub fn unwrap(&self) -> &AstType {
+        match self {
+            Type::Resolved(t) => t,
+            _ => todo!(),
+        }
+    }
+}
 
-    Enum(String),
-    EnumVariant { enum_type: String, t: Box<AstType> },
+#[derive(Debug, Clone, PartialEq)]
+pub enum AstType {
+    Function(Vec<Type>, Box<Type>),
+    Closure(Vec<Type>, Box<Type>),
+    ExternalFunction(Vec<Type>, Box<Type>),
+
+    Enum { // Should only hold enum_type, maybe width
+        enum_type: String,
+        max_variant_width: usize,
+        t: Option<Box<Type>>,
+    },
 
     Float,
     Bool,
@@ -25,7 +45,7 @@ pub enum AstType {
 
     String,
 
-    HeapAllocated(Box<AstType>),
+    HeapAllocated(Box<Type>),
 }
 impl AstType {
     pub fn is_obj(&self) -> bool {
@@ -39,11 +59,13 @@ impl AstType {
             AstType::Bool => bool::width(),
             AstType::Function(..) => ChunkAdr::width(),
             AstType::Float => f64::width(),
-            AstType::Enum(..) => todo!(),
+            AstType::Enum {
+                max_variant_width, ..
+            } => u8::width() + max_variant_width,
             AstType::ExternalFunction(..) => ExternalAdr::width(),
             AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => HeapAdr::width(),
             AstType::Nil => 0,
-            AstType::EnumVariant { .. } => panic!(),
+            // AstType::Unresolved(..) => todo!(),
         }
     }
 }
@@ -119,6 +141,121 @@ impl<'a> TypeChecker<'a> {
             .map(|ext| ext.lookup_type(name))
             .flatten()
             .map(|t| Variable::Global(t))
+    }
+    fn resolve_types(ast: &mut Ast, types: &mut HashMap<String, AstType>) {
+        match ast {
+            Ast::Program(cont) | Ast::Block{cont, ..} => {
+                for ast in cont.iter_mut() {
+                    Self::resolve_types(ast, types);
+                }
+            }
+            
+            Ast::Print {
+                expr: Box<Ast>,
+                t: Option<Type>,
+                pos: usize,
+            },
+            Ast::Return {
+                expr: Option<Box<Ast>>,
+                t: Option<Type>,
+                pos: usize,
+            },
+
+            Ast::Declaration {
+                name: String,
+                expr: Box<Ast>,
+                t: Option<Type>,
+                pos: usize,
+            },
+            Ast::FuncDeclaration {
+                name: String,
+                func: Box<Ast>,
+                args_t: Vec<Type>,
+                ret_t: Type,
+                pos: usize,
+            },
+            Ast::EnumDeclaration {
+                name: String,
+                variants: Vec<(String, Type)>,
+                pos: usize,
+            },
+
+            Ast::Variable {
+                name: String,
+                t: Option<Type>,
+                pos: usize,
+            },
+            Ast::Assign {
+                name: String,
+                expr: Box<Ast>,
+                t: Option<Type>,
+                move_to_heap: Option<bool>,
+                pos: usize,
+            },
+
+            Ast::Switch {
+                head: Box<Ast>,
+                cases: Vec<(Ast, Ast)>,
+                default: Option<Box<Ast>>,
+                pos: usize,
+            },
+            Ast::If {
+                condition: Box<Ast>,
+                body: Box<Ast>,
+                else_body: Option<Box<Ast>>,
+                pos: usize,
+            },
+            Ast::While {
+                condition: Box<Ast>,
+                body: Box<Ast>,
+                pos: usize,
+            },
+
+            Ast::ExprStatement {
+                expr: Box<Ast>,
+                t: Option<Type>,
+                pos: usize,
+            },
+
+            Ast::Function {
+                body: Box<Ast>,
+                args: Vec<(String, Type)>,
+                captured: Vec<(String, Option<Type>)>,
+                ret_t: Type,
+                pos: usize,
+            },
+            Ast::Call {
+                ident: Box<Ast>,
+                args: Vec<Ast>,
+                args_width: Option<u8>,
+                call_t: Option<CallType>,
+                pos: usize,
+            },
+
+            Ast::Float(f64, usize),
+            Ast::Bool(bool, usize),
+
+            Ast::String(String, usize),
+
+            Ast::Negate(Box<Ast>, usize),
+            Ast::Not(Box<Ast>, usize),
+
+            Ast::Multiply(Box<Ast>, Box<Ast>, Option<Type>, usize),
+            Ast::Divide(Box<Ast>, Box<Ast>, Option<Type>, usize),
+            Ast::Add(Box<Ast>, Box<Ast>, Option<Type>, usize),
+            Ast::Sub(Box<Ast>, Box<Ast>, Option<Type>, usize),
+
+            Ast::Equal(Box<Ast>, Box<Ast>, Option<Type>, usize),
+            Ast::NotEqual(Box<Ast>, Box<Ast>, Option<Type>, usize),
+            Ast::Greater(Box<Ast>, Box<Ast>, Option<Type>, usize),
+            Ast::GreaterEqual(Box<Ast>, Box<Ast>, Option<Type>, usize),
+            Ast::Lesser(Box<Ast>, Box<Ast>, Option<Type>, usize),
+            Ast::LesserEqual(Box<Ast>, Box<Ast>, Option<Type>, usize),
+
+            Ast::And(Box<Ast>, Box<Ast>, usize),
+            Ast::Or(Box<Ast>, Box<Ast>, usize),
+
+        }
     }
     fn annotate_type(&mut self, ast: &mut Ast) -> Result<(AstType, bool), TypeError> {
         let (t, diverges) = match ast {
@@ -225,14 +362,16 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
+                let max_variant_width = variants.iter().map(|v| v.1.width()).max().unwrap_or(0);
                 for var in variants.iter() {
                     if self
                         .globals
                         .insert(
                             var.0.clone(),
-                            AstType::EnumVariant {
+                            AstType::Enum {
                                 enum_type: name.clone(),
-                                t: Box::new(var.1.clone()),
+                                max_variant_width,
+                                t: Some(Box::new(var.1.clone())),
                             },
                         )
                         .is_some()
@@ -262,12 +401,7 @@ impl<'a> TypeChecker<'a> {
                         }
                         Variable::Global(global) => {
                             t.replace(global.clone());
-                            match global {
-                                AstType::EnumVariant { enum_type, t } if *t == AstType::Nil => {
-                                    AstType::Enum(enum_type)
-                                }
-                                _ => global.clone(),
-                            }
+                            global.clone()
                         }
                     },
                     false,
@@ -492,9 +626,20 @@ impl<'a> TypeChecker<'a> {
                         call_t.replace(CallType::External);
                         (a, r)
                     }
-                    AstType::EnumVariant { enum_type, t } => {
+                    AstType::Enum {
+                        enum_type,
+                        max_variant_width,
+                        t,
+                    } => {
                         call_t.replace(CallType::Enum);
-                        (vec![*t], Box::new(AstType::Enum(enum_type.clone())))
+                        (
+                            vec![*t.clone().unwrap()],
+                            Box::new(Type::Resolved(AstType::Enum {
+                                enum_type,
+                                max_variant_width,
+                                t,
+                            })),
+                        )
                     }
                     t @ _ => {
                         return Err(TypeError::Error(format!("cannot call type {:?}", t), *pos))
@@ -562,23 +707,30 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
-                t.replace(t_r.clone());
+                t.replace(Type::Resolved(t_r.clone()));
                 (t_r, false)
             }
             Ast::Equal(l, r, t, pos) | Ast::NotEqual(l, r, t, pos) => {
                 let t_l = self.annotate_type(l)?.0;
                 let t_r = self.annotate_type(r)?.0;
-                if t_l != t_r {
-                    return Err(TypeError::Error(
-                        format!(
-                            "type of left operand ({:?}) doesn't match type of right ({:?})",
-                            t_l, t_r
-                        ),
-                        *pos,
-                    ));
+                match (&t_l, &t_r) {
+                    (
+                        AstType::Enum { enum_type: t_l, .. },
+                        AstType::Enum { enum_type: t_r, .. },
+                    ) if t_l == t_r => {}
+                    (t_l, t_r) if t_l != t_r => {
+                        return Err(TypeError::Error(
+                            format!(
+                                "type of left operand ({:?}) doesn't match type of right ({:?})",
+                                t_l, t_r
+                            ),
+                            *pos,
+                        ));
+                    }
+                    _ => {}
                 }
                 if match t_l {
-                    AstType::Enum(..) | AstType::Bool | AstType::Float => false,
+                    AstType::Enum { .. } | AstType::Bool | AstType::Float => false,
                     _ => true,
                 } {
                     return Err(TypeError::Error(
@@ -586,7 +738,7 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
-                t.replace(t_r);
+                t.replace(Type::Resolved(t_r));
                 (AstType::Bool, false)
             }
             Ast::Greater(l, r, t, pos)
@@ -613,7 +765,7 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
-                t.replace(t_r);
+                t.replace(Type::Resolved(t_r));
                 (AstType::Bool, false)
             }
             Ast::And(l, r, pos) | Ast::Or(l, r, pos) => {

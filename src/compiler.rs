@@ -84,7 +84,7 @@ impl<'a> Compiler<'a> {
             AstType::Bool
             | AstType::Function(..)
             | AstType::Float
-            | AstType::Enum(..)
+            | AstType::Enum { .. }
             | AstType::ExternalFunction(..) => {
                 self.chunk().push_op(OpCode::Pop {
                     width: t.width() as u8,
@@ -96,8 +96,7 @@ impl<'a> Compiler<'a> {
                     width: t.width() as u8,
                 });
             }
-            AstType::Nil => {}
-            AstType::EnumVariant { .. } => todo!(),
+            AstType::Nil => {} // AstType::Unresolved(..) => todo!(),
         };
     }
     fn push_return(&mut self, expr: &Option<Box<Ast>>, t: &AstType) {
@@ -160,12 +159,11 @@ impl<'a> Compiler<'a> {
                     | AstType::Closure(..)
                     | AstType::HeapAllocated(_)
                     | AstType::Function(..)
-                    | AstType::Enum(..)
-                    | AstType::EnumVariant { .. }
+                    | AstType::Enum { .. }
                     | AstType::Nil => todo!(),
                     AstType::String => {
                         self.chunk().push_op(OpCode::PrintString);
-                    }
+                    } // AstType::Unresolved(..) => todo!(),
                 };
             }
             Ast::Return { expr, t, .. } => {
@@ -196,7 +194,7 @@ impl<'a> Compiler<'a> {
                 match v {
                     Variable::Local(v) => {
                         let is_rc = match t.as_ref().unwrap() {
-                            t @ AstType::Enum(..)
+                            t @ AstType::Enum { .. }
                             | t @ AstType::Bool
                             | t @ AstType::Function { .. }
                             | t @ AstType::Float => {
@@ -206,10 +204,9 @@ impl<'a> Compiler<'a> {
                                 });
                                 false
                             }
-                            AstType::EnumVariant { .. } => todo!(),
                             AstType::HeapAllocated(inner_t) => {
                                 match **inner_t {
-                                    AstType::Float | AstType::Bool | AstType::Enum(..) => {
+                                    AstType::Float | AstType::Bool | AstType::Enum { .. } => {
                                         self.chunk().push_op(OpCode::FromHeap { stack_i: v.offset })
                                     }
                                     _ => todo!(),
@@ -224,6 +221,7 @@ impl<'a> Compiler<'a> {
                                 true
                             }
                             AstType::ExternalFunction(..) | AstType::Nil => panic!(),
+                            // AstType::Unresolved(..) => todo!(),
                         };
                         if is_rc {
                             self.chunk().push_op(OpCode::IncreaseRC);
@@ -252,20 +250,21 @@ impl<'a> Compiler<'a> {
                 match v {
                     Variable::Local(v) => {
                         match t.as_ref().unwrap() {
-                            t @ AstType::Enum(..)
+                            t @ AstType::Enum { .. }
                             | t @ AstType::Bool
                             | t @ AstType::Function(..)
                             | t @ AstType::Float => self.chunk().push_op(OpCode::Assign {
                                 stack_i: v.offset,
                                 width: t.width() as u8,
                             }),
-                            AstType::EnumVariant { .. } => panic!(),
                             AstType::HeapAllocated(inner_t) => {
                                 if move_to_heap.unwrap() {
                                     match **inner_t {
-                                        AstType::Float | AstType::Bool | AstType::Enum(..) => self
-                                            .chunk()
-                                            .push_op(OpCode::AssignHeapified { stack_i: v.offset }),
+                                        AstType::Float | AstType::Bool | AstType::Enum { .. } => {
+                                            self.chunk().push_op(OpCode::AssignHeapified {
+                                                stack_i: v.offset,
+                                            })
+                                        }
                                         _ => todo!(),
                                     }
                                 } else {
@@ -277,6 +276,7 @@ impl<'a> Compiler<'a> {
                                 .chunk()
                                 .push_op(OpCode::AssignObj { stack_i: v.offset }),
                             AstType::ExternalFunction(..) | AstType::Nil => panic!(),
+                            // AstType::Unresolved(..) => todo!(),
                         };
                     }
                     _ => panic!(),
@@ -410,7 +410,7 @@ impl<'a> Compiler<'a> {
                             pos: *pos,
                         });
                         match var.1.as_ref().unwrap() {
-                            t @ AstType::Float | t @ AstType::Bool | t @ AstType::Enum(..) => {
+                            t @ AstType::Float | t @ AstType::Bool | t @ AstType::Enum { .. } => {
                                 self.chunk().push_op(OpCode::Heapify {
                                     width: t.width() as u8,
                                 })
@@ -492,7 +492,7 @@ impl<'a> Compiler<'a> {
                 self.codegen(l);
                 self.codegen(r);
                 match t.as_ref().unwrap() {
-                    t @ AstType::Enum(..) | t @ AstType::Bool | t @ AstType::Float => {
+                    t @ AstType::Enum { .. } | t @ AstType::Bool | t @ AstType::Float => {
                         self.chunk().push_op(OpCode::Equal {
                             width: t.width() as u8,
                         })
@@ -504,7 +504,7 @@ impl<'a> Compiler<'a> {
                 self.codegen(l);
                 self.codegen(r);
                 match t.as_ref().unwrap() {
-                    t @ AstType::Enum(..) | t @ AstType::Bool | t @ AstType::Float => {
+                    t @ AstType::Enum { .. } | t @ AstType::Bool | t @ AstType::Float => {
                         self.chunk().push_op(OpCode::Equal {
                             width: t.width() as u8,
                         })
