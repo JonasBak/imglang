@@ -16,8 +16,7 @@ pub enum AstType {
     Closure(Vec<AstType>, Box<AstType>),
     ExternalFunction(Vec<AstType>, Box<AstType>),
 
-    Enum(String),
-    EnumVariant { enum_type: String, t: Box<AstType> },
+    EnumVariant { enum_type: String, max_size: usize },
 
     Float,
     Bool,
@@ -26,6 +25,8 @@ pub enum AstType {
     String,
 
     HeapAllocated(Box<AstType>),
+
+    Unresolved(String),
 }
 impl AstType {
     pub fn is_obj(&self) -> bool {
@@ -39,14 +40,28 @@ impl AstType {
             AstType::Bool => bool::width(),
             AstType::Function(..) => ChunkAdr::width(),
             AstType::Float => f64::width(),
-            AstType::Enum(..) => todo!(),
             AstType::ExternalFunction(..) => ExternalAdr::width(),
             AstType::Closure(..) | AstType::HeapAllocated(_) | AstType::String => HeapAdr::width(),
             AstType::Nil => 0,
-            AstType::EnumVariant { .. } => panic!(),
+            AstType::EnumVariant { max_size, .. } => u8::width() + max_size,
+            AstType::Unresolved { .. } => panic!(),
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CustomType {
+    Enum {
+        enum_type: String,
+        max_size: usize,
+    },
+    EnumVariant {
+        enum_type: String,
+        max_size: usize,
+        wraps: AstType,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
     Error(String, usize),
@@ -68,6 +83,7 @@ enum Variable {
 pub struct TypeChecker<'a> {
     variables: Vec<LocalVariable>,
     globals: HashMap<String, AstType>,
+    custom_types: HashMap<String, CustomType>,
     externals: Option<&'a Externals>,
     current_scope_depth: u16,
     is_root: bool,
@@ -82,6 +98,7 @@ impl<'a> TypeChecker<'a> {
         let mut type_checker = TypeChecker {
             variables: vec![],
             globals: HashMap::new(),
+            custom_types: HashMap::new(),
             externals,
             current_scope_depth: 0,
             is_root: true,
@@ -119,6 +136,30 @@ impl<'a> TypeChecker<'a> {
             .map(|ext| ext.lookup_type(name))
             .flatten()
             .map(|t| Variable::Global(t))
+    }
+    fn resolve_type(&self, name: &String) -> Option<AstType> {
+        self.custom_types.get(name).map(|t| match t {
+            CustomType::Enum {
+                enum_type,
+                max_size,
+            }
+            | CustomType::EnumVariant {
+                enum_type,
+                max_size,
+                ..
+            } => AstType::EnumVariant {
+                enum_type: enum_type.clone(),
+                max_size: *max_size,
+            },
+        })
+    }
+    fn resolve_unresolved_type(&self, t: &mut AstType) {
+        match t {
+            AstType::Unresolved(name) => {
+                *t = self.resolve_type(name).unwrap().clone();
+            }
+            _ => {}
+        }
     }
     fn annotate_type(&mut self, ast: &mut Ast) -> Result<(AstType, bool), TypeError> {
         let (t, diverges) = match ast {
@@ -225,14 +266,16 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
+                let max_size = variants.iter().map(|(_, t)| t.width()).max().unwrap_or(0);
                 for var in variants.iter() {
                     if self
-                        .globals
+                        .custom_types
                         .insert(
                             var.0.clone(),
-                            AstType::EnumVariant {
+                            CustomType::EnumVariant {
                                 enum_type: name.clone(),
-                                t: Box::new(var.1.clone()),
+                                max_size,
+                                wraps: var.1.clone(),
                             },
                         )
                         .is_some()
@@ -243,16 +286,29 @@ impl<'a> TypeChecker<'a> {
                         ));
                     }
                 }
+                if self
+                    .custom_types
+                    .insert(
+                        name.clone(),
+                        CustomType::Enum {
+                            enum_type: name.clone(),
+                            max_size,
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(TypeError::Error(
+                        format!("name {} already in use", name),
+                        *pos,
+                    ));
+                }
                 (AstType::Nil, false)
             }
             Ast::Variable { name, t, pos } => {
-                let v = self.resolve_variable(name).ok_or(TypeError::Error(
-                    format!("variable {} is not defined", name),
-                    *pos,
-                ))?;
+                let v = self.resolve_variable(name);
                 (
                     match v {
-                        Variable::Local(local) => {
+                        Some(Variable::Local(local)) => {
                             t.replace(local.t.clone());
                             if let AstType::HeapAllocated(t) = local.t {
                                 *t.clone()
@@ -260,14 +316,13 @@ impl<'a> TypeChecker<'a> {
                                 local.t.clone()
                             }
                         }
-                        Variable::Global(global) => {
+                        Some(Variable::Global(global)) => {
                             t.replace(global.clone());
-                            match global {
-                                AstType::EnumVariant { enum_type, t } if *t == AstType::Nil => {
-                                    AstType::Enum(enum_type)
-                                }
-                                _ => global.clone(),
-                            }
+                            global.clone()
+                        }
+                        None => {
+                            t.replace(AstType::Unresolved(name.clone()));
+                            AstType::Unresolved(name.clone())
                         }
                     },
                     false,
@@ -407,6 +462,11 @@ impl<'a> TypeChecker<'a> {
                     })
                     .collect::<Result<Vec<_>, TypeError>>()?;
 
+                for (_, arg_t) in args.iter_mut() {
+                    self.resolve_unresolved_type(arg_t);
+                }
+                self.resolve_unresolved_type(ret_t);
+
                 let old_variables = mem::replace(&mut self.variables, vec![]);
                 let old_return_values = mem::replace(&mut self.return_values, vec![]);
                 let old_depth = mem::replace(&mut self.current_scope_depth, 0);
@@ -492,10 +552,27 @@ impl<'a> TypeChecker<'a> {
                         call_t.replace(CallType::External);
                         (a, r)
                     }
-                    AstType::EnumVariant { enum_type, t } => {
-                        call_t.replace(CallType::Enum);
-                        (vec![*t], Box::new(AstType::Enum(enum_type.clone())))
-                    }
+                    AstType::Unresolved(name) => match self.custom_types.get(&name) {
+                        Some(CustomType::EnumVariant {
+                            enum_type,
+                            max_size,
+                            wraps,
+                        }) => {
+                            call_t.replace(CallType::Enum);
+                            let wraps = match wraps {
+                                AstType::Nil => Vec::new(),
+                                t @ _ => vec![t.clone()],
+                            };
+                            (
+                                wraps,
+                                Box::new(AstType::EnumVariant {
+                                    enum_type: enum_type.clone(),
+                                    max_size: *max_size,
+                                }),
+                            )
+                        }
+                        _ => return Err(TypeError::Error(format!("unresolved {:?}", name), *pos)),
+                    },
                     t @ _ => {
                         return Err(TypeError::Error(format!("cannot call type {:?}", t), *pos))
                     }
@@ -517,14 +594,14 @@ impl<'a> TypeChecker<'a> {
             Ast::String(_, _) => (AstType::String, false),
             Ast::Negate(a, pos) => {
                 let t = self.annotate_type(a)?.0;
-                if match t {
-                    AstType::Float => false,
-                    _ => true,
-                } {
-                    return Err(TypeError::Error(
-                        format!("operation can't be preformed on type {:?}", t),
-                        *pos,
-                    ));
+                match t {
+                    AstType::Float => {}
+                    _ => {
+                        return Err(TypeError::Error(
+                            format!("operation can't be preformed on type {:?}", t),
+                            *pos,
+                        ));
+                    }
                 }
                 (t, false)
             }
@@ -553,14 +630,14 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
-                if match t_l {
-                    AstType::Float => false,
-                    _ => true,
-                } {
-                    return Err(TypeError::Error(
-                        format!("operation can't be preformed on type {:?}", t_l),
-                        *pos,
-                    ));
+                match t_l {
+                    AstType::Float => {}
+                    _ => {
+                        return Err(TypeError::Error(
+                            format!("operation can't be preformed on type {:?}", t_l),
+                            *pos,
+                        ));
+                    }
                 }
                 t.replace(t_r.clone());
                 (t_r, false)
@@ -577,14 +654,14 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
-                if match t_l {
-                    AstType::Enum(..) | AstType::Bool | AstType::Float => false,
-                    _ => true,
-                } {
-                    return Err(TypeError::Error(
-                        format!("operation can't be preformed on type {:?}", t_l),
-                        *pos,
-                    ));
+                match t_l {
+                    AstType::EnumVariant { .. } | AstType::Bool | AstType::Float => {}
+                    _ => {
+                        return Err(TypeError::Error(
+                            format!("operation can't be preformed on type {:?}", t_l),
+                            *pos,
+                        ));
+                    }
                 }
                 t.replace(t_r);
                 (AstType::Bool, false)
@@ -604,14 +681,14 @@ impl<'a> TypeChecker<'a> {
                         *pos,
                     ));
                 }
-                if match t_l {
-                    AstType::Float => false,
-                    _ => true,
-                } {
-                    return Err(TypeError::Error(
-                        format!("operation can't be preformed on type {:?}", t_l),
-                        *pos,
-                    ));
+                match t_l {
+                    AstType::Float => {}
+                    _ => {
+                        return Err(TypeError::Error(
+                            format!("operation can't be preformed on type {:?}", t_l),
+                            *pos,
+                        ));
+                    }
                 }
                 t.replace(t_r);
                 (AstType::Bool, false)

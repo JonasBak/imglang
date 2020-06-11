@@ -75,7 +75,6 @@ impl<'a> VM<'a> {
                         parent_frame_offset,
                         args_width,
                     } = self.call_frames.pop().unwrap();
-                    println!("{} {}", frame_offset, parent_frame_offset);
 
                     self.stack.0.copy_within(
                         self.stack.1 - width as usize..self.stack.1,
@@ -134,6 +133,13 @@ impl<'a> VM<'a> {
                 OpCode::PushU16 { data } => {
                     self.stack.push(data);
                 }
+                OpCode::PushPadding { width } => {
+                    let width = width as usize;
+                    self.stack.reserved(width);
+                    self.stack.0[self.stack.1..self.stack.1 + width]
+                        .copy_from_slice(&vec![0; width]);
+                    self.stack.1 += width;
+                }
                 OpCode::Pop { width } => {
                     let new_top = self.stack.1 - width as usize;
                     self.stack.truncate(new_top as StackAdr);
@@ -141,9 +147,8 @@ impl<'a> VM<'a> {
                 OpCode::Equal { width } => {
                     let i0 = self.stack.1 - width as usize;
                     let i1 = self.stack.1 - 2 * width as usize;
-                    let value = self.stack.0[i0..i0 + width as usize]
-                        == self.stack.0[i1..i1 + width as usize];
-                    self.stack.truncate(i0 as StackAdr);
+                    let value = self.stack.0[i0..self.stack.1] == self.stack.0[i1..i0];
+                    self.stack.truncate(i1 as StackAdr);
                     self.stack.push(value);
                 }
                 OpCode::GreaterF64 => {
@@ -194,12 +199,6 @@ impl<'a> VM<'a> {
                 OpCode::Jump { ip: jmp_ip } => ip = jmp_ip,
                 OpCode::SwitchJump { ip: jmp_ip } => {
                     todo!();
-                    let compare: u64 = self.stack.pop();
-                    let top = self.stack.len() - 1;
-                    let switch_value: u64 = self.stack.get(top);
-                    if compare == switch_value {
-                        ip = jmp_ip;
-                    }
                 }
                 OpCode::Function { chunk_i } => {
                     self.stack.push(chunk_i);
@@ -260,15 +259,6 @@ impl<'a> VM<'a> {
                         ExternalArg::Nil => {}
                         _ => todo!(),
                     };
-                }
-                OpCode::EnumVariant => {
-                    todo!();
-                    // let variant: u8 = self.stack.pop();
-                    // let value = self.stack.pop();
-                    // self.stack.push(match value {
-                    //     Value::Float(value) => Value::EnumFloat(variant, value),
-                    //     _ => todo!(),
-                    // });
                 }
                 OpCode::IncreaseRC => {
                     let top = self.stack.len() - HeapAdr::width() as u16;

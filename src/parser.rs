@@ -197,7 +197,7 @@ fn parse_type(lexer: &mut Lexer, default: &Option<AstType>) -> ParserResult<AstT
         }
         TokenType::Identifier(t) => {
             lexer.next();
-            AstType::Enum(t.clone())
+            AstType::Unresolved(t.clone())
         }
         _ => match default {
             Some(t) => t.clone(),
