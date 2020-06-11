@@ -3,18 +3,10 @@ use std::collections::HashMap;
 
 pub type ExternalAdr = u16;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ExternalArg {
-    Float(f64),
-    Bool(bool),
-    String(String),
-    Nil,
-}
-
 pub struct ExternalFunction {
     pub args_t: Vec<AstType>,
     pub ret_t: AstType,
-    pub dispatch: fn(args: Vec<ExternalArg>) -> ExternalArg,
+    pub dispatch: fn(&mut Stack),
 }
 
 pub struct Externals {
@@ -54,24 +46,22 @@ impl Externals {
         ))
     }
 
-    pub fn dispatch(
-        &self,
-        adr: ExternalAdr,
-        stack: &mut Stack,
-        mut offset: StackAdr,
-    ) -> ExternalArg {
+    pub fn dispatch(&self, adr: ExternalAdr, stack: &mut Stack) {
         let func = self.functions.get(adr as usize).unwrap();
-        let mut args = Vec::new();
-        for arg_t in func.args_t.iter() {
-            args.push(match arg_t {
-                AstType::Float => {
-                    let f: f64 = stack.get(offset);
-                    ExternalArg::Float(f)
-                }
-                _ => todo!(),
-            });
-            offset += 1;
-        }
-        (func.dispatch)(args)
+        (func.dispatch)(stack);
     }
+}
+
+pub trait AstTypeCaster {
+    fn ast_type() -> AstType;
+}
+
+macro_rules! external_pop_args {
+    ($stack:ident, ($arg:ident, $t:ident), $(($rest_arg:ident, $rest_t:ident)),+) => {
+        external_pop_args!($stack, $(($rest_arg, $rest_t)),+);
+        let $arg: $t = $stack.pop();
+    };
+    ($stack:ident, ($arg:ident, $t:ident)) => {
+        let $arg: $t = $stack.pop();
+    };
 }

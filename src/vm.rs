@@ -246,19 +246,7 @@ impl<'a> VM<'a> {
                 OpCode::CallExternal { args_width } => {
                     let func_i: ExternalAdr = self.stack.pop();
 
-                    let offset = self.stack.len() - args_width as StackAdr;
-                    let ret = self
-                        .externals
-                        .unwrap()
-                        .dispatch(func_i, &mut self.stack, offset);
-                    self.stack.truncate(offset);
-                    match ret {
-                        ExternalArg::Float(f) => {
-                            self.stack.push(f);
-                        }
-                        ExternalArg::Nil => {}
-                        _ => todo!(),
-                    };
+                    self.externals.unwrap().dispatch(func_i, &mut self.stack);
                 }
                 OpCode::IncreaseRC => {
                     let top = self.stack.len() - HeapAdr::width() as u16;

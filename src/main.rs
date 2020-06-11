@@ -1,6 +1,7 @@
 mod chunk;
 mod compiler;
 mod debugger;
+#[macro_use]
 mod externals;
 mod heap;
 mod lexer;
@@ -50,11 +51,12 @@ fn main() {
     externals.add_function(
         "testExternal".to_string(),
         ExternalFunction {
-            args_t: vec![],
+            args_t: vec![AstType::Float, AstType::Float],
             ret_t: AstType::Float,
-            dispatch: |_: Vec<ExternalArg>| -> ExternalArg {
-                println!("called external function");
-                return ExternalArg::Float(123.345);
+            dispatch: |stack: &mut Stack| {
+                external_pop_args!(stack, (arg0, f64), (arg1, f64));
+                println!("from external: {}", arg0 / arg1);
+                stack.push(12.0);
             },
         },
     );

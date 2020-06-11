@@ -25,8 +25,8 @@ fn external_function_call() {
         ExternalFunction {
             args_t: vec![],
             ret_t: AstType::Float,
-            dispatch: |args: Vec<ExternalArg>| -> ExternalArg {
-                return ExternalArg::Float(123.345);
+            dispatch: |stack: &mut Stack| {
+                stack.push(123.345);
             },
         },
     );
@@ -42,7 +42,10 @@ fn external_function_with_args() {
         ExternalFunction {
             args_t: vec![AstType::Float],
             ret_t: AstType::Float,
-            dispatch: |args: Vec<ExternalArg>| -> ExternalArg { return args[0].clone() },
+            dispatch: |stack: &mut Stack| {
+                let arg: f64 = stack.pop();
+                stack.push(arg);
+            },
         },
     );
 
