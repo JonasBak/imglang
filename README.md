@@ -1,0 +1,57 @@
+# imglang
+
+## Debug
+
+The vm can be buildt to display debug information using `--features debug`.
+
+```
+// test
+fun add(a float, b float) float {
+  return a + b;
+}
+
+var arg0 = 10;
+var arg1 = 5;
+
+print add(arg0, arg1) == 15;
+```
+
+Running in debug outputs with `cargo run --features debug -- test` outputs:
+
+```
+************************BYTECODE CHUNK 0************************
+000000	Function { chunk_i: 1 }
+000001	Pop { width: 2 }
+000002	ConstantF64 { data_i: 0 }
+000003	ConstantF64 { data_i: 1 }
+000004	Variable { stack_i: 0, width: 8 }
+000005	Variable { stack_i: 8, width: 8 }
+000006	PushU16 { data: 1 }
+000007	Call { args_width: 16 }
+000008	ConstantF64 { data_i: 2 }
+000009	Equal { width: 8 }
+000010	PrintBool
+000011	Return { width: 0 }
+************************BYTECODE CHUNK 1************************
+000000	Variable { stack_i: 0, width: 8 }
+000001	Variable { stack_i: 8, width: 8 }
+000002	AddF64
+000003	Return { width: 8 }
+****************************************************************
+0000	chunk:  0 stack:   0 nested: 0	Function { chunk_i: 1 }
+0001	chunk:  0 stack:   2 nested: 0	Pop { width: 2 }
+0002	chunk:  0 stack:   0 nested: 0	ConstantF64 { data_i: 0 }
+0003	chunk:  0 stack:   8 nested: 0	ConstantF64 { data_i: 1 }
+0004	chunk:  0 stack:  16 nested: 0	Variable { stack_i: 0, width: 8 }
+0005	chunk:  0 stack:  24 nested: 0	Variable { stack_i: 8, width: 8 }
+0006	chunk:  0 stack:  32 nested: 0	PushU16 { data: 1 }
+0007	chunk:  0 stack:  34 nested: 0	Call { args_width: 16 }
+0000	chunk:  1 stack:  32 nested: 1	Variable { stack_i: 0, width: 8 }
+0001	chunk:  1 stack:  40 nested: 1	Variable { stack_i: 8, width: 8 }
+0002	chunk:  1 stack:  48 nested: 1	AddF64
+0003	chunk:  1 stack:  40 nested: 1	Return { width: 8 }
+0008	chunk:  0 stack:  24 nested: 0	ConstantF64 { data_i: 2 }
+0009	chunk:  0 stack:  32 nested: 0	Equal { width: 8 }
+0010	chunk:  0 stack:  17 nested: 0	PrintBool
+0011	chunk:  0 stack:  16 nested: 0	Return { width: 0 }
+```
