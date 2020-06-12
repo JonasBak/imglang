@@ -229,6 +229,7 @@ fn get_rule(t: &TokenType) -> Rule {
         TokenType::Or => (None, Some(logic_or), PREC_OR),
         TokenType::Fun => (Some(function), None, PREC_NONE),
         TokenType::String(_) => (Some(literal), None, PREC_NONE),
+        TokenType::Bar => (None, Some(binary), PREC_ASSIGNMENT),
         _ => (None, None, PREC_NONE),
     }
 }
@@ -339,6 +340,13 @@ fn binary(lexer: &mut Lexer, lhs: Ast) -> ParserResult<Ast> {
         TokenType::GreaterEqual => Ast::GreaterEqual(Box::new(lhs), Box::new(rhs), None, pos),
         TokenType::Lesser => Ast::Lesser(Box::new(lhs), Box::new(rhs), None, pos),
         TokenType::LesserEqual => Ast::LesserEqual(Box::new(lhs), Box::new(rhs), None, pos),
+        TokenType::Bar => Ast::Call {
+            ident: Box::new(rhs),
+            args: vec![lhs],
+            args_width: None,
+            call_t: None,
+            pos,
+        },
         _ => {
             return Err(ParserError::Unexpected(
                 lexer.prev().unwrap(),
